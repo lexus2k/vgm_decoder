@@ -25,6 +25,7 @@ class AY38910
 public:
     AY38910(uint8_t chipType, uint8_t flags);
 
+    /** Resets ay-3-8910 state */
     void reset();
 
     /**
@@ -43,10 +44,10 @@ public:
      */
     void init();
 
-    void run();
+    /** Returns left (16 bits) and right (16 bits) channels if next sound sample */
+    uint32_t getSample();
 
-    uint32_t getSound();
-
+    /** Set chip clock external frequency */
     void setFrequency( uint32_t frequency );
 
     /**
@@ -58,11 +59,10 @@ public:
      */
     void setSampleFrequency( uint32_t sampleFrequency );
 
+    /** Returns currently set sample frequency */
     uint32_t getSampleFrequency() const { return m_sampleFrequency; }
 
-    /**
-     * Changes volume level. Default level is 64!
-     */
+    /** Changes volume level. Default level is 64! */
     void setVolume(uint8_t volume);
 
     /** TODO: */

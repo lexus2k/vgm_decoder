@@ -281,7 +281,7 @@ void AY38910::write(uint8_t reg, uint16_t value)
     }
 }
 
-uint32_t AY38910::getSound()
+uint32_t AY38910::getSample()
 {
     for (int i=0; i<3; i++)
     {
@@ -334,7 +334,8 @@ uint32_t AY38910::getSound()
         }
     }
 
-    uint32_t val = 0;
+    uint32_t left = 0;
+    uint32_t right = 0;
 
     for(int chan=0; chan<3; chan++)
     {
@@ -346,14 +347,16 @@ uint32_t AY38910::getSound()
         if (m_useEnvelope[chan])
         {
             // TODO: Evelope must have it's own table
-            val += m_levelTable[enabled ? m_envVolume: 0];
+            left += m_levelTable[enabled ? m_envVolume: 0];
+            right += m_levelTable[enabled ? m_envVolume: 0];
         }
         else
         {
-            val += m_levelTable[enabled ? m_amplitude[chan]: 0];
+            left += m_levelTable[enabled ? m_amplitude[chan]: 0];
+            right += m_levelTable[enabled ? m_amplitude[chan]: 0];
         }
     }
-    val = val / 3;
-    if ( val > 65535 ) val = 65535;
-    return val;
+    left /= 3; if ( left > 65535 ) left = 65535;
+    right /= 3; if ( right > 65535 ) right = 65535;
+    return (left<<16) | right;
 }

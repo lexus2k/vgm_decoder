@@ -1,6 +1,6 @@
 #include "vgm_file.h"
 
-#define VGM_FILE_DEBUG 1
+#define VGM_FILE_DEBUG 0
 
 #if VGM_FILE_DEBUG
 #include <stdio.h>
@@ -74,6 +74,7 @@ bool VgmFile::open(const uint8_t * vgmdata, int size)
 
     m_writeCounter = 0;
     m_sampleSum = 0;
+    m_sampleSumValid = false;
 
     LOG( "Rate: %d\n", m_rate );
     LOG( "ay8910 frequency: %dHz\n", m_header->ay8910Clock );
@@ -283,20 +284,31 @@ void VgmFile::setVolume( uint8_t volume )
     if ( m_chip ) m_chip->setVolume( volume );
 }
 
+typedef struct
+{
+    uint16_t left, right;
+} StereoChannels;
+
 void VgmFile::interpolateSample()
 {
-    uint32_t nextSample = m_chip->getSound();
-    if ( m_sampleSum == 0xFFFFFFFF ) // If no sample previously reached the mixer assign new sample
+    uint32_t nextSample = m_chip->getSample();
+    StereoChannels &source = reinterpret_cast<StereoChannels&>(nextSample);
+    StereoChannels &dest = reinterpret_cast<StereoChannels&>(m_sampleSum);
+
+    if ( !m_sampleSumValid ) // If no sample previously reached the mixer assign new sample
     {
         m_sampleSum = nextSample;
+        m_sampleSumValid = true;
     }
-    else if ( nextSample >= 8192 && nextSample > m_sampleSum )
+    if ( (source.left >= 8192 && source.left > dest.left) ||
+         (source.left < 8192 && source.left < dest.left) )
     {
-        m_sampleSum = nextSample;
+        dest.left = source.left;
     }
-    else if ( nextSample < 8192 && nextSample < m_sampleSum )
+    if ( (source.right >= 8192 && source.right > dest.right) ||
+         (source.right < 8192 && source.right < dest.right) )
     {
-        m_sampleSum = nextSample;
+        dest.right = source.right;
     }
 }
 
@@ -321,11 +333,11 @@ int VgmFile::decodePcm(uint8_t *outBuffer, int maxSize)
 
             if ( m_writeCounter >= VGM_SAMPLE_RATE )
             {
-                *(reinterpret_cast<uint32_t *>(outBuffer)) = (m_sampleSum << 16) | m_sampleSum;
+                *(reinterpret_cast<uint32_t *>(outBuffer)) = m_sampleSum;
                 outBuffer += 4;
                 decoded += 4;
                 m_writeCounter -= VGM_SAMPLE_RATE;
-                m_sampleSum = 0xFFFFFFFF;
+                m_sampleSumValid = false;
             }
         }
     }

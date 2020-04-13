@@ -116,7 +116,10 @@ private:
     uint32_t m_writeCounter;
     uint32_t m_readScaler;
     uint32_t m_writeScaler;
+
     uint32_t m_sampleSum;
+    bool m_sampleSumValid = false;
+
     uint8_t m_state = 0;
 
     AY38910 *m_chip = nullptr;
