@@ -41,7 +41,7 @@ void writeFile(const char *name, VgmFile *vgm)
         if ( size < 0 ) break;
         for (int i = 0; i<sizeof(buffer); i+=2)
         {
-             *reinterpret_cast<int16_t *>(buffer+i) = *reinterpret_cast<uint16_t *>(buffer+i) - 32767;
+             *reinterpret_cast<int16_t *>(buffer+i) = *reinterpret_cast<uint16_t *>(buffer+i) - 32768;
         }
         fwrite( buffer, size, 1, fileptr );
         if ( size < 1024 ) break;

@@ -34,8 +34,13 @@ static constexpr uint16_t noiseLut[] =
     0x17D, 0x1FC, 0x3F9, 0x7F2,
 };
 
+// NTSC
 static constexpr uint16_t dmcLut[] =
 {
+/*    0x036, 0x048, 0x054, 0x06A,
+    0x080, 0x08E, 0x0A0, 0x0BE,
+    0x0D6, 0x0E2, 0x0FE, 0x11E,
+    0x140, 0x154, 0x17C, 0x1AC,*/
     0x1AC, 0x17C, 0x154, 0x140,
     0x11E, 0x0FE, 0x0E2, 0x0D6,
     0x0BE, 0x0A0, 0x08E, 0x080,
@@ -194,11 +199,11 @@ void NesApu::write(uint16_t reg, uint8_t val)
                 m_chan[chanIndex].period = (m_chan[chanIndex].period & (0x00FF << (CONST_SHIFT_BITS + 4))) |
                                            ((val & 0x07) << (8 + CONST_SHIFT_BITS + 4));
             }
-            if ( chanIndex != 2 && !(m_regs[APU_RECT_VOL1 + chanIndex * 4] & DISABLE_LEN_MASK))
+            if ( chanIndex != 2 /* && !(m_regs[APU_RECT_VOL1 + chanIndex * 4] & DISABLE_LEN_MASK) */)
             {
                 m_chan[chanIndex].lenCounter = lengthLut[val >> 3];
             }
-            if ( chanIndex == 2 && !(m_regs[APU_RECT_VOL1 + chanIndex * 4] & 0x80))
+            if ( chanIndex == 2 /* && !(m_regs[APU_RECT_VOL1 + chanIndex * 4] & 0x80) */)
             {
                 m_chan[chanIndex].lenCounter = lengthLut[val >> 3];
             }
@@ -298,7 +303,6 @@ uint32_t NesApu::getSample()
     updateNoiseChannel(3);
     updateDmcChannel(m_chan[4]);
     uint32_t sample = 0;
-    sample += m_chan[0].output;
 /*    for (int i=0; i<ddd - 1; i++) {
         samples[i] = samples[i+1];
     }
@@ -319,10 +323,19 @@ uint32_t NesApu::getSample()
          fprintf(stderr, "ERROR CLICK\n");
          for (int i=0; i<APU_MAX_REG; i++) fprintf(stderr, "REG [0x%02X]=0x%02X\n", i, m_regs[i]);
     }*/
+/*
+    sample += m_chan[0].output;
     sample += m_chan[1].output;
     sample += (m_chan[2].output * 0xC0) >> 8;
     sample += (m_chan[3].output * 0xC0) >> 8;
-    sample += (m_chan[4].output * 0xFF) >> 8;
+    sample += (m_chan[4].output * 0xFF) >> 8;*/
+
+    sample += (m_chan[0].output * 0x090) >> 8; // chan 1
+    sample += (m_chan[1].output * 0x090) >> 8; // chan 2
+    sample += (m_chan[2].output * 0x090) >> 8; // tri
+    sample += (m_chan[3].output * 0x060) >> 8; // noise
+    sample += (m_chan[4].output * 0x100) >> 8; // dmc
+
     if ( sample > 65535 ) sample = 65535;
 //    if ( sample > 32767 ) sample = 32767;
     return sample | (sample << 16);
@@ -662,7 +675,7 @@ void NesApu::updateDmcChannel(ChannelInfo &info)
             {
                 info.dmcIrqFlag = !!(m_regs[APU_DMC_DMA_FREQ] & DMC_IRQ_ENABLE_MASK);
                 info.dmcActive = false;
-                info.output = (nesApuLevelTable[15] * info.volume) >> 7 ;
+                info.output = (static_cast<uint32_t>(nesApuLevelTable[15]) * info.volume) >> 7;
                 return;
             }
         }
