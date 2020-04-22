@@ -13,8 +13,8 @@
 #define VGM_SAMPLE_RATE 44100
 
 VgmFile::VgmFile()
-    : m_writeScaler( VGM_SAMPLE_RATE )
-    , m_readScaler( VGM_SAMPLE_RATE )
+    : m_readScaler( VGM_SAMPLE_RATE )
+    , m_writeScaler( VGM_SAMPLE_RATE )
 {
 }
 
@@ -298,7 +298,7 @@ bool VgmFile::nextCommand()
                 m_dataPtr += 4;
                 break;
             }
-            else if ( cmd >= 0xE2 && cmd <= 0xFF )
+            else if ( cmd >= 0xE2 && static_cast<uint16_t>(cmd) <= 0xFF )
             {
                 // dd dd dd dd : four operands, reserved for future use
                 m_dataPtr += 5;
@@ -312,7 +312,7 @@ bool VgmFile::nextCommand()
     return true;
 }
 
-void VgmFile::setVolume( uint8_t volume )
+void VgmFile::setVolume( uint16_t volume )
 {
     if ( m_msxChip ) m_msxChip->setVolume( volume );
     if ( m_nesChip ) m_nesChip->setVolume( volume );
@@ -325,7 +325,7 @@ typedef struct
 
 void VgmFile::interpolateSample()
 {
-    uint32_t nextSample;
+    uint32_t nextSample = 0;
     if ( m_msxChip ) nextSample = m_msxChip->getSample();
     if ( m_nesChip ) nextSample = m_nesChip->getSample();
     StereoChannels &source = reinterpret_cast<StereoChannels&>(nextSample);

@@ -56,7 +56,7 @@ public:
     uint32_t getSample();
 
     /** Sets volume, default volume is 64 */
-    void setVolume(uint8_t volume);
+    void setVolume(uint16_t volume);
 
     void reset();
 
@@ -73,7 +73,7 @@ private:
     bool m_quaterSignal = false;
     bool m_halfSignal = false;
     bool m_fullSignal = false;
-    uint8_t m_volume = 64;
+    uint16_t m_volume = 64;
     ChannelInfo m_chan[5]{};
 
     void updateRectChannel(int i);

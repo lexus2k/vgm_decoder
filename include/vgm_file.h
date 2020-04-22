@@ -87,7 +87,6 @@ public:
     ~VgmFile();
 
     bool open(const uint8_t * vgmdata, int size);
-    void close() { }
 
     bool nextCommand();
 
@@ -99,7 +98,7 @@ public:
     void setSampleFrequency( uint32_t frequency );
 
     /** Sets volume, default level is 64 */
-    void setVolume(uint8_t volume);
+    void setVolume(uint16_t volume);
 
 private:
     const uint8_t * m_rawData = nullptr;

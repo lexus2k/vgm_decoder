@@ -63,7 +63,7 @@ public:
     uint32_t getSampleFrequency() const { return m_sampleFrequency; }
 
     /** Changes volume level. Default level is 64! */
-    void setVolume(uint8_t volume);
+    void setVolume(uint16_t volume);
 
     /** TODO: */
     //void setStereoMode(uint8_t mode);
@@ -148,7 +148,7 @@ private:
     uint16_t m_levelTable[32];
 
     /** user volume level */
-    uint8_t m_userVolume = 64;
+    uint16_t m_userVolume = 64;
 };
 
 

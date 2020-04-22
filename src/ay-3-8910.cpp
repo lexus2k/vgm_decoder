@@ -126,7 +126,7 @@ void AY38910::setSampleFrequency( uint32_t sampleFrequency )
     reset();
 }
 
-void AY38910::setVolume(uint8_t volume)
+void AY38910::setVolume(uint16_t volume)
 {
     m_userVolume = volume;
     reset();
@@ -360,7 +360,7 @@ uint32_t AY38910::getSample()
             right += m_levelTable[enabled ? m_amplitude[chan]: 0];
         }
     }
-    left /= 3; if ( left > 65535 ) left = 65535;
-    right /= 3; if ( right > 65535 ) right = 65535;
+/*    left /= 3;*/ if ( left > 65535 ) left = 65535;
+/*    right /= 3;*/ if ( right > 65535 ) right = 65535;
     return (left<<16) | right;
 }
