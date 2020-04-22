@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "ay-3-8910.h"
+#include "nes_apu.h"
 
 typedef struct
 {
@@ -91,7 +92,8 @@ public:
 
     int decodePcm(uint8_t *outBuffer, int maxSize);
 
-    AY38910 *getChip() { return m_chip; }
+    AY38910 *getMsxChip() { return m_msxChip; }
+    NesApu *getNesChip() { return m_nesChip; }
 
     void setSampleFrequency( uint32_t frequency );
 
@@ -122,7 +124,9 @@ private:
 
     uint8_t m_state = 0;
 
-    AY38910 *m_chip = nullptr;
+    AY38910 *m_msxChip = nullptr;
+    NesApu *m_nesChip = nullptr;
 
     void interpolateSample();
+    void deleteChips();
 };

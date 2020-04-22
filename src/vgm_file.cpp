@@ -1,6 +1,6 @@
 #include "vgm_file.h"
 
-#define VGM_FILE_DEBUG 0
+#define VGM_FILE_DEBUG 1
 
 #if VGM_FILE_DEBUG
 #include <stdio.h>
@@ -20,10 +20,20 @@ VgmFile::VgmFile()
 
 VgmFile::~VgmFile()
 {
-    if ( m_chip )
+    deleteChips();
+}
+
+void VgmFile::deleteChips()
+{
+    if ( m_msxChip )
     {
-        delete m_chip;
-        m_chip = nullptr;
+        delete m_msxChip;
+        m_msxChip = nullptr;
+    }
+    if ( m_nesChip )
+    {
+        delete m_nesChip;
+        m_nesChip = nullptr;
     }
 }
 
@@ -72,6 +82,17 @@ bool VgmFile::open(const uint8_t * vgmdata, int size)
         m_loops = 1;
     }
 
+    if ( m_header->ay8910Clock )
+    {
+        m_msxChip = new AY38910( m_header->ay8910Type, m_header->ay8910Flags );
+        m_msxChip->setFrequency( m_header->ay8910Clock );
+    }
+    else if ( m_header->nesApuClock )
+    {
+        m_nesChip = new NesApu();
+//        m_nesChip->setFrequency( m_header->nesApuClock );
+    }
+
     m_writeCounter = 0;
     m_sampleSum = 0;
     m_sampleSumValid = false;
@@ -86,8 +107,6 @@ bool VgmFile::open(const uint8_t * vgmdata, int size)
     LOG( "loop samples: %d\n", m_header->loopSamples );
     LOG( "loop modifier: %d\n", m_header->loopModifier );
     LOG( "loop base: %d\n", m_header->loopBase ); // NumLoops = NumLoopsModified - LoopBase
-    m_chip = new AY38910( m_header->ay8910Type, m_header->ay8910Flags );
-    m_chip->setFrequency( m_header->ay8910Clock );
     return true;
 }
 
@@ -104,6 +123,7 @@ bool VgmFile::nextCommand()
                Bit 4-5: Channel C mask (00=off, 01=left, 10=right, 11=center)
                Bit 6: Chip type, 0=AY8910, 1=YM2203 SSG part
                Bit 7: Chip number, 0 or 1 */
+            LOG( " [stereo mask cmd 0x%02X]\n", m_dataPtr[1] );
             m_dataPtr += 2;
             break;
         case 0x4F: // dd    : Game Gear PSG stereo, write dd to port 0x06
@@ -156,13 +176,31 @@ bool VgmFile::nextCommand()
                 LOG( " [stop]\n" );
                 return false;
             }
-        case 0x67: // ...   : data block: see below
             break;
+        case 0x67: // ...   : data block: see below
+            // 0x67 0x66 tt ss ss ss ss
+        {
+            LOG( " [DATA BLOCK type=0x%02X, len=0x%02X%02X%02X%02X]\n", m_dataPtr[2], m_dataPtr[6], m_dataPtr[5], m_dataPtr[4], m_dataPtr[3] );
+            uint32_t dataLength = (m_dataPtr[3] + (m_dataPtr[4] << 8) + (m_dataPtr[5] << 16) + (m_dataPtr[6] << 24));
+            if ( m_nesChip ) m_nesChip->setDataBlock( m_dataPtr + 7, dataLength );
+            m_dataPtr += 7 + dataLength;
+            break;
+        }
         case 0x68: // ...   : PCM RAM write: see below
+            LOG( " [PCM RAM WRITE]\n" );
             break;
         case 0xA0: // aa dd : AY8910, write value dd to register aa
-            LOG( " [write ay8910 reg [%d] = 0x%02X ]", m_dataPtr[1], m_dataPtr[2]);
-            m_chip->write( m_dataPtr[1], m_dataPtr[2] );
+            LOG( " [write ay8910 reg [0x%02X] = 0x%02X ]", m_dataPtr[1], m_dataPtr[2]);
+            m_msxChip->write( m_dataPtr[1], m_dataPtr[2] );
+            m_dataPtr += 3;
+            break;
+        case 0xB4: // aa dd : NES APU, write value dd to register aa
+                   // Note: Registers 00-1F equal NES address 4000-401F,
+                   //       registers 20-3E equal NES address 4080-409E,
+                   //       register 3F equals NES address 4023,
+                   //       registers 40-7F equal NES address 4040-407F.
+            LOG( " [write nesAPU reg [0x%02X] = 0x%02X ]", m_dataPtr[1], m_dataPtr[2]);
+            m_nesChip->write( m_dataPtr[1], m_dataPtr[2] );
             m_dataPtr += 3;
             break;
         case 0xB0: // aa dd : RF5C68, write value dd to register aa
@@ -170,11 +208,6 @@ bool VgmFile::nextCommand()
         case 0xB2: // ad dd : PWM, write value ddd to register a (d is MSB, dd is LSB)
         case 0xB3: // aa dd : GameBoy DMG, write value dd to register aa
                    // Note: Register 00 equals GameBoy address FF10.
-        case 0xB4: // aa dd : NES APU, write value dd to register aa
-                   // Note: Registers 00-1F equal NES address 4000-401F,
-                   //       registers 20-3E equal NES address 4080-409E,
-                   //       register 3F equals NES address 4023,
-                   //       registers 40-7F equal NES address 4040-407F.
         case 0xB5: // aa dd : MultiPCM, write value dd to register aa
         case 0xB6: // aa dd : uPD7759, write value dd to register aa
         case 0xB7: // aa dd : OKIM6258, write value dd to register aa
@@ -281,7 +314,8 @@ bool VgmFile::nextCommand()
 
 void VgmFile::setVolume( uint8_t volume )
 {
-    if ( m_chip ) m_chip->setVolume( volume );
+    if ( m_msxChip ) m_msxChip->setVolume( volume );
+//    if ( m_nesChip ) m_nesChip->setVolume( volume );
 }
 
 typedef struct
@@ -291,7 +325,9 @@ typedef struct
 
 void VgmFile::interpolateSample()
 {
-    uint32_t nextSample = m_chip->getSample();
+    uint32_t nextSample;
+    if ( m_msxChip ) nextSample = m_msxChip->getSample();
+    if ( m_nesChip ) nextSample = m_nesChip->getSample();
     StereoChannels &source = reinterpret_cast<StereoChannels&>(nextSample);
     StereoChannels &dest = reinterpret_cast<StereoChannels&>(m_sampleSum);
 
@@ -347,7 +383,7 @@ int VgmFile::decodePcm(uint8_t *outBuffer, int maxSize)
 void VgmFile::setSampleFrequency( uint32_t frequency )
 {
     m_writeScaler = frequency;
-    if ( m_chip->getSampleFrequency() != VGM_SAMPLE_RATE )
+    if ( m_msxChip && m_msxChip->getSampleFrequency() != VGM_SAMPLE_RATE )
     {
         LOG( "Error: chip must run at 44100 Hz sample frequency!!!\n" );
     }
