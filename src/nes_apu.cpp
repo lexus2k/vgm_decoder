@@ -2,7 +2,7 @@
 
 #include <stdio.h>
 
-#define NES_APU_DEBUG 1
+#define NES_APU_DEBUG 0
 
 #if NES_APU_DEBUG
 #include <stdio.h>
@@ -132,6 +132,7 @@ inline uint8_t getRegIndex(uint16_t reg)
 
 NesApu::NesApu()
 {
+    m_volume = 64;
     reset();
 }
 
@@ -147,6 +148,7 @@ void NesApu::reset()
     {
         m_mem[i].data = nullptr;
     }
+    setVolume( m_volume );
 }
 
 void NesApu::write(uint16_t reg, uint8_t val)
@@ -256,6 +258,16 @@ void NesApu::write(uint16_t reg, uint8_t val)
         default:
             fprintf(stderr, "Unknown reg 0x%02X\n", reg);
             break;
+    }
+}
+
+void NesApu::setVolume(uint8_t volume)
+{
+    for(int i=0; i<16; i++)
+    {
+        uint32_t vol = static_cast<uint32_t>(nesApuLevelTable[i]) * volume / 64;
+        if ( vol > 65535 ) vol = 65535;
+        m_volTable[i] = vol;
     }
 }
 

@@ -87,6 +87,7 @@ public:
     ~VgmFile();
 
     bool open(const uint8_t * vgmdata, int size);
+    void close() { }
 
     bool nextCommand();
 

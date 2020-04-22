@@ -139,14 +139,18 @@ void AY38910::reset()
     {
         for (int i = 0; i < 32; i++)
         {
-            m_levelTable[i] = static_cast<uint32_t>( ym2149LevelTable[i] ) * m_userVolume / 64;
+            uint32_t vol = static_cast<uint32_t>( ym2149LevelTable[i] ) * m_userVolume / 64;
+            if ( vol > 65535 ) vol = 65535;
+            m_levelTable[i] = vol;
         }
     }
     else
     {
         for (int i = 0; i < 16; i++)
         {
-            m_levelTable[i] = static_cast<uint32_t>( ay8910LevelTable[i] ) * m_userVolume / 64;
+            uint32_t vol = static_cast<uint32_t>( ay8910LevelTable[i] ) * m_userVolume / 64;
+            if ( vol > 65535 ) vol = 65535;
+            m_levelTable[i] = vol;
         }
     }
     m_toneFrequencyScale = (m_frequency / m_sampleFrequency); // * 16

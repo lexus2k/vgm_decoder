@@ -1,6 +1,6 @@
 #include "vgm_file.h"
 
-#define VGM_FILE_DEBUG 1
+#define VGM_FILE_DEBUG 0
 
 #if VGM_FILE_DEBUG
 #include <stdio.h>
@@ -315,7 +315,7 @@ bool VgmFile::nextCommand()
 void VgmFile::setVolume( uint8_t volume )
 {
     if ( m_msxChip ) m_msxChip->setVolume( volume );
-//    if ( m_nesChip ) m_nesChip->setVolume( volume );
+    if ( m_nesChip ) m_nesChip->setVolume( volume );
 }
 
 typedef struct

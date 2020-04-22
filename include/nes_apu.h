@@ -55,6 +55,9 @@ public:
 
     uint32_t getSample();
 
+    /** Sets volume, default volume is 64 */
+    void setVolume(uint8_t volume);
+
     void reset();
 
     void setDataBlock( const uint8_t *data, uint32_t len );
@@ -62,6 +65,7 @@ public:
 private:
     uint8_t m_regs[APU_MAX_REG]{};
     NesMemoryBlock m_mem[APU_MAX_MEMORY_BLOCKS]{};
+    uint64_t m_volTable[16]{};
 
     uint32_t m_lastFrameCounter = 0;
     uint8_t m_apuFrames = 0;
@@ -69,6 +73,7 @@ private:
     bool m_quaterSignal = false;
     bool m_halfSignal = false;
     bool m_fullSignal = false;
+    uint8_t m_volume = 64;
     ChannelInfo m_chan[5]{};
 
     void updateRectChannel(int i);
