@@ -37,10 +37,6 @@ static constexpr uint16_t noiseLut[] =
 // NTSC
 static constexpr uint16_t dmcLut[] =
 {
-/*    0x036, 0x048, 0x054, 0x06A,
-    0x080, 0x08E, 0x0A0, 0x0BE,
-    0x0D6, 0x0E2, 0x0FE, 0x11E,
-    0x140, 0x154, 0x17C, 0x1AC,*/
     0x1AC, 0x17C, 0x154, 0x140,
     0x11E, 0x0FE, 0x0E2, 0x0D6,
     0x0BE, 0x0A0, 0x08E, 0x080,
@@ -164,11 +160,9 @@ void NesApu::write(uint16_t reg, uint8_t val)
         case APU_RECT_VOL1:
         case APU_RECT_VOL2:
         case APU_NOISE_VOL:
-//            m_chan[chanIndex].volume = val & 0x0F;
             m_chan[chanIndex].divider = val & VALUE_VOL_MASK;
             break;
         case APU_TRIANGLE:
-//            m_chan[chanIndex].linearReloadFlag = !!(val & 0x80);
             break;
         case APU_SWEEP1:
         case APU_SWEEP2:
@@ -178,9 +172,11 @@ void NesApu::write(uint16_t reg, uint8_t val)
         case APU_TRI_FREQ:
             m_chan[chanIndex].period = (m_chan[chanIndex].period & (0xFF00 << (CONST_SHIFT_BITS + 4))) |
                                        (val << (CONST_SHIFT_BITS + 4));
+            if ( m_chan[chanIndex].counter > m_chan[chanIndex].period ) m_chan[chanIndex].counter = m_chan[chanIndex].period;
             break;
         case APU_NOISE_FREQ:
             m_chan[chanIndex].period = (noiseLut[val & NOISE_FREQ_MASK]) << (CONST_SHIFT_BITS + 4);
+            if ( m_chan[chanIndex].counter > m_chan[chanIndex].period ) m_chan[chanIndex].counter = m_chan[chanIndex].period;
             break;
         case APU_RECT_LEN1:
         case APU_RECT_LEN2:
@@ -201,14 +197,7 @@ void NesApu::write(uint16_t reg, uint8_t val)
                 m_chan[chanIndex].period = (m_chan[chanIndex].period & (0x00FF << (CONST_SHIFT_BITS + 4))) |
                                            ((val & 0x07) << (8 + CONST_SHIFT_BITS + 4));
             }
-            if ( chanIndex != 2 /* && !(m_regs[APU_RECT_VOL1 + chanIndex * 4] & DISABLE_LEN_MASK) */)
-            {
-                m_chan[chanIndex].lenCounter = lengthLut[val >> 3];
-            }
-            if ( chanIndex == 2 /* && !(m_regs[APU_RECT_VOL1 + chanIndex * 4] & 0x80) */)
-            {
-                m_chan[chanIndex].lenCounter = lengthLut[val >> 3];
-            }
+            m_chan[chanIndex].lenCounter = lengthLut[val >> 3];
             if ( reg == APU_TRI_LEN )
             {
                 m_chan[chanIndex].linearReloadFlag = true;
@@ -223,10 +212,8 @@ void NesApu::write(uint16_t reg, uint8_t val)
             m_chan[4].volume = val & 0x7F;
             break;
         case APU_DMC_ADDR:
-//            m_chan[4].dmcAddr = val * 0x40 + 0xC000;
             break;
         case APU_DMC_LEN:
-//            m_chan[4].dmcLen = val * 16 + 1;
             break;
         case APU_STATUS:
             for(int i=0; i<4; i++)
@@ -253,7 +240,6 @@ void NesApu::write(uint16_t reg, uint8_t val)
             m_lastFrameCounter = 0;
             m_apuFrames = 0;
             m_apuFrames = 0;
-//            m_clockDivider = 0;
             break;
         default:
             fprintf(stderr, "Unknown reg 0x%02X\n", reg);
@@ -306,50 +292,22 @@ void NesApu::setDataBlock( const uint8_t *data, uint32_t len )
 
 uint32_t NesApu::getSample()
 {
-//    constexpr int ddd = 512;
-//    static uint32_t samples[ddd]{};
     updateFrameCounter();
+
     updateRectChannel(0);
     updateRectChannel(1);
     updateTriangleChannel(m_chan[2]);
     updateNoiseChannel(3);
     updateDmcChannel(m_chan[4]);
-    uint32_t sample = 0;
-/*    for (int i=0; i<ddd - 1; i++) {
-        samples[i] = samples[i+1];
-    }
-    samples[ddd-1] = m_chan[1].output;
-    bool what = samples[ddd-1] == 0 && samples[ddd-2] != 0;
-    if ( what )
-    {
-        for (int i=ddd-4; i>0; i--) {
-            if (samples[i] != 0)
-            {
-                if (i>20) what = false;
-                break;
-            }
-        }
-    }
-    if ( what )
-    {
-         fprintf(stderr, "ERROR CLICK\n");
-         for (int i=0; i<APU_MAX_REG; i++) fprintf(stderr, "REG [0x%02X]=0x%02X\n", i, m_regs[i]);
-    }*/
-/*
-    sample += m_chan[0].output;
-    sample += m_chan[1].output;
-    sample += (m_chan[2].output * 0xC0) >> 8;
-    sample += (m_chan[3].output * 0xC0) >> 8;
-    sample += (m_chan[4].output * 0xFF) >> 8;*/
 
-    sample += (m_chan[0].output * 0x090) >> 8; // chan 1
-    sample += (m_chan[1].output * 0x090) >> 8; // chan 2
-    sample += (m_chan[2].output * 0x090) >> 8; // tri
-    sample += (m_chan[3].output * 0x060) >> 8; // noise
-    sample += (m_chan[4].output * 0x100) >> 8; // dmc
+    uint32_t sample = 0;
+    sample += (m_chan[0].output * 0x0B0) >> 8; // chan 1
+    sample += (m_chan[1].output * 0x0B0) >> 8; // chan 2
+    sample += (m_chan[2].output * 0x050) >> 8; // tri
+    sample += (m_chan[3].output * 0x050) >> 8; // noise
+    sample += (m_chan[4].output * 0x180) >> 8; // dmc
 
     if ( sample > 65535 ) sample = 65535;
-//    if ( sample > 32767 ) sample = 32767;
     return sample | (sample << 16);
 }
 
@@ -420,7 +378,6 @@ void NesApu::updateRectChannel(int i)
     if ( volumeReg & FIXED_VOL_MASK ) // fixed volume
     {
         m_chan[i].volume = volumeReg & VALUE_VOL_MASK;
-//        m_chan[i].decayCounter = volumeReg & VALUE_VOL_MASK;
     }
     else
     {
@@ -611,7 +568,6 @@ void NesApu::updateNoiseChannel(int i)
     if ( volumeReg & FIXED_VOL_MASK ) // fixed volume
     {
         m_chan[i].volume = volumeReg & VALUE_VOL_MASK;
-//        m_chan[i].decayCounter = volumeReg & VALUE_VOL_MASK;
     }
     else
     {
