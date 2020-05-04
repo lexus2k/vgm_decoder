@@ -80,13 +80,37 @@ typedef struct
     uint8_t reserved4[7 * 4];
 } VgmHeader;
 
+typedef struct
+{
+    uint32_t ident; // NESM
+    uint8_t byte1A;
+    uint8_t version;
+    uint8_t songIndex; // 1, 2, ...
+    uint16_t loadAddress;
+    uint16_t initAddress;
+    uint16_t playAddress;
+    uint8_t name[32];
+    uint8_t artist[32];
+    uint8_t copyright[32];
+    uint16_t ntscPlaySpeed; // 1/1000000 second ticks
+    uint8_t bankSwitch[8];
+    uint16_t palPlaySpeed; // 1/1000000 second ticks
+    uint8_t palNtscBits;
+    uint8_t extraSoundChip;
+    uint8_t nsf2Reserved;
+    uint8_t dataLength[3];
+} NsfHeader;
+
 class VgmFile
 {
 public:
     VgmFile();
     ~VgmFile();
 
-    bool open(const uint8_t * vgmdata, int size);
+    /** Allows to open NSF and VGM data files */
+    bool open(const uint8_t *data, int size);
+
+    void close() {}
 
     bool nextCommand();
 
@@ -107,6 +131,7 @@ private:
     const uint8_t * m_dataPtr = nullptr;
 
     const VgmHeader *m_header = nullptr;
+    const NsfHeader *m_nsfHeader = nullptr;
 
     uint32_t m_rate;
     uint32_t m_vgmDataOffset;
@@ -129,4 +154,10 @@ private:
 
     void interpolateSample();
     void deleteChips();
+
+    bool openVgm(const uint8_t * vgmdata, int size);
+    bool openNsf(const uint8_t * nsfdata, int size);
+
+    int decodeNfsPcm(uint8_t *outBuffer, int maxSize);
+    int decodeVgmPcm(uint8_t *outBuffer, int maxSize);
 };

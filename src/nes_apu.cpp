@@ -1,8 +1,9 @@
 #include "nes_apu.h"
 
+#include <malloc.h>
 #include <stdio.h>
 
-#define NES_APU_DEBUG 0
+#define NES_APU_DEBUG 1
 
 #if NES_APU_DEBUG
 #include <stdio.h>
@@ -134,6 +135,11 @@ NesApu::NesApu()
 
 NesApu::~NesApu()
 {
+    if ( m_ram )
+    {
+        free( m_ram );
+        m_ram = nullptr;
+    }
 }
 
 void NesApu::reset()
@@ -149,6 +155,7 @@ void NesApu::reset()
 
 void NesApu::write(uint16_t reg, uint8_t val)
 {
+    uint16_t originReg = reg;
     reg = getRegIndex(reg);
     if ( reg < APU_MAX_REG )
     {
@@ -242,7 +249,7 @@ void NesApu::write(uint16_t reg, uint8_t val)
             m_apuFrames = 0;
             break;
         default:
-            fprintf(stderr, "Unknown reg 0x%02X\n", reg);
+            fprintf(stderr, "Unknown reg 0x%02X [0x%04X]\n", reg, originReg);
             break;
     }
 }
@@ -257,7 +264,7 @@ void NesApu::setVolume(uint16_t volume)
     }
 }
 
-uint8_t NesApu::read(uint16_t reg, uint8_t val)
+uint8_t NesApu::read(uint16_t reg)
 {
     return 0;
 }
@@ -270,6 +277,16 @@ void NesApu::setDataBlock( const uint8_t *data, uint32_t len )
         return;
     }
     uint16_t address = data[0] + (data[1] << 8);
+    setDataBlock( address, data + 2, len - 2 );
+}
+
+void NesApu::setDataBlock( uint16_t addr, const uint8_t *data, uint32_t len )
+{
+    if ( len < 2 )
+    {
+        LOG("Invalid data - too short\n");
+        return;
+    }
     int blockNumber = -1;
     for(int i=0; i<APU_MAX_MEMORY_BLOCKS; i++)
     {
@@ -284,10 +301,10 @@ void NesApu::setDataBlock( const uint8_t *data, uint32_t len )
         LOG("Out of memory blocks\n");
         return;
     }
-    m_mem[ blockNumber ].data = data + 2;
-    m_mem[ blockNumber ].size = len - 2;
-    m_mem[ blockNumber ].addr = address;
-    LOG("New data block [0x%04X] (len=%d)\n", address, len - 2);
+    m_mem[ blockNumber ].data = data;
+    m_mem[ blockNumber ].size = len;
+    m_mem[ blockNumber ].addr = addr;
+    LOG("New data block [0x%04X] (len=%d)\n", addr, len);
 }
 
 uint32_t NesApu::getSample()
@@ -647,25 +664,11 @@ void NesApu::updateDmcChannel(ChannelInfo &info)
                 return;
             }
         }
-        for (int i=0; i<APU_MAX_MEMORY_BLOCKS; i++)
-        {
-            if ( m_mem[i].data == nullptr )
-            {
-                LOG("Memory data fetch error 0x%04X\n", info.dmcAddr);
-                return;
-            }
-            if ( info.dmcAddr >= m_mem[i].addr &&
-                 info.dmcAddr < m_mem[i].addr + m_mem[i].size )
-            {
-                uint16_t addr = info.dmcAddr - m_mem[i].addr;
-                info.dmcBuffer = m_mem[i].data[ addr ];
-                info.sequencer = 8;
-                info.dmcAddr++;
-                info.dmcLen--;
-                if ( info.dmcAddr == 0x0000 ) info.dmcAddr = 0x8000;
-                break;
-            }
-        }
+        info.dmcBuffer = getData( info.dmcAddr );
+        info.sequencer = 8;
+        info.dmcAddr++;
+        info.dmcLen--;
+        if ( info.dmcAddr == 0x0000 ) info.dmcAddr = 0x8000;
     }
 
     if ( info.sequencer )
@@ -712,4 +715,600 @@ void NesApu::updateFrameCounter()
             m_apuFrames = 0;
         }
     }
+}
+
+uint8_t NesApu::getData(uint16_t address)
+{
+    if ( address < 0x0800 )
+    {
+        if ( m_ram == nullptr ) m_ram = static_cast<uint8_t *>(malloc(2048));
+        printf("[%04X] ==> %02X\n", address, m_ram[address]);
+        return m_ram[address];
+    }
+    else if ( address < 0x6000 )
+    {
+        return read( address );
+    }
+    for (int i=0; i<APU_MAX_MEMORY_BLOCKS; i++)
+    {
+        if ( m_mem[i].data == nullptr )
+        {
+            LOG("Memory data fetch error 0x%04X\n", address);
+            return 0;
+        }
+        if ( address >= m_mem[i].addr &&
+             address < m_mem[i].addr + m_mem[i].size )
+        {
+            uint16_t addr = address - m_mem[i].addr;
+            printf("[%04X] ==> %02X\n", address, m_mem[i].data[ addr ]);
+            return  m_mem[i].data[ addr ];
+        }
+    }
+    return 0;
+}
+
+uint8_t NesApu::getDataInt(uint16_t address)
+{
+    if ( address < 0x0800 )
+    {
+        if ( m_ram == nullptr ) m_ram = static_cast<uint8_t *>(malloc(2048));
+        return m_ram[address];
+    }
+    else if ( address < 0x6000 )
+    {
+        return read( address );
+    }
+    for (int i=0; i<APU_MAX_MEMORY_BLOCKS; i++)
+    {
+        if ( m_mem[i].data == nullptr )
+        {
+            LOG("Memory data fetch error 0x%04X\n", address);
+            return 0;
+        }
+        if ( address >= m_mem[i].addr &&
+             address < m_mem[i].addr + m_mem[i].size )
+        {
+            uint16_t addr = address - m_mem[i].addr;
+            return  m_mem[i].data[ addr ];
+        }
+    }
+    return 0;
+}
+
+bool NesApu::setData(uint16_t address, uint8_t data)
+{
+    if ( address < 0x0800 )
+    {
+        if ( m_ram == nullptr ) m_ram = static_cast<uint8_t *>(malloc(2048));
+        m_ram[address] = data;
+        printf("[%04X] <== %02X\n", address, m_ram[address]);
+        return true;
+    }
+    else if ( address < 0x6000 )
+    {
+        write( address, data );
+        return true;
+    }
+    LOG("Memory data write error (ROM) x%04X\n", address);
+    return false;
+}
+
+NesCpuState &NesApu::cpuState()
+{
+    return m_cpu;
+}
+
+void NesApu::IMD()
+{
+    m_cpu.absAddr = m_cpu.pc;
+    m_cpu.pc++;
+}
+
+void NesApu::ZP()
+{
+    m_cpu.absAddr = fetch();
+}
+
+void NesApu::ZPX()
+{
+    m_cpu.absAddr = (fetch() + m_cpu.x) & 0x00FF;
+}
+
+void NesApu::ZPY()
+{
+    m_cpu.absAddr = (fetch() + m_cpu.y) & 0x00FF;
+}
+
+void NesApu::REL()
+{
+    m_cpu.relAddr = fetch();
+    if ( m_cpu.relAddr & 0x80)
+        m_cpu.relAddr |= 0xFF00;
+}
+
+void NesApu::ABS()
+{
+    m_cpu.absAddr = fetch();
+    m_cpu.absAddr |= static_cast<uint16_t>(fetch()) << 8;
+}
+
+void NesApu::ABX()
+{
+    m_cpu.absAddr = static_cast<uint16_t>(fetch());
+    m_cpu.absAddr |= (static_cast<uint16_t>(fetch()) << 8);
+    m_cpu.absAddr += m_cpu.x;
+}
+
+void NesApu::ABY()
+{
+    m_cpu.absAddr = fetch();
+    m_cpu.absAddr |= (static_cast<uint16_t>(fetch()) << 8);
+    m_cpu.absAddr += m_cpu.y;
+}
+
+void NesApu::IND()
+{
+    m_cpu.absAddr = fetch();
+    m_cpu.absAddr |= (static_cast<uint16_t>(fetch()) << 8);
+    // no page boundary hardware bug
+    m_cpu.absAddr = (getData(m_cpu.absAddr)) | (getData( m_cpu.absAddr + 1 ) << 8);
+}
+
+void NesApu::IDX()
+{
+    m_cpu.absAddr = (fetch() + m_cpu.x) & 0x00FF;
+    m_cpu.absAddr = (getData(m_cpu.absAddr)) | (getData( (m_cpu.absAddr + 1) & 0xFF ) << 8);
+}
+
+void NesApu::IDY()
+{
+    m_cpu.absAddr = fetch();
+    m_cpu.absAddr = static_cast<uint16_t>(getData( m_cpu.absAddr )) |
+                    (static_cast<uint16_t>(getData( (m_cpu.absAddr + 1) & 0xFF )) << 8);
+    m_cpu.absAddr += m_cpu.y;
+}
+
+uint8_t NesApu::fetch()
+{
+    return getData( m_cpu.pc++ );
+}
+
+enum
+{
+    C_FLAG = 0x01,
+    Z_FLAG = 0x02,
+    I_D_FLAG = 0x04,
+    D_FLAG = 0x08,
+    B_FLAG = 0x10,
+    U_FLAG = 0x20, // Unused
+    V_FLAG = 0x40,
+    N_FLAG = 0x80,
+};
+
+void NesApu::modifyFlags(uint8_t baseData)
+{
+    m_cpu.flags &= ~(Z_FLAG | N_FLAG);
+    m_cpu.flags |= baseData ? 0: Z_FLAG;
+    m_cpu.flags |= (baseData & 0x80) ? N_FLAG : 0;
+}
+
+void NesApu::printCpuState(const Instruction & instruction, uint16_t pc)
+{
+    LOG("SP:%02X A:%02X X:%02X Y:%02X F:%02X [%04X] (0x%02X) %s\n",
+         m_cpu.sp, m_cpu.a, m_cpu.x, m_cpu.y, m_cpu.flags, pc, getDataInt( pc ),
+         getOpCode( instruction, getDataInt(pc + 1) | (static_cast<uint16_t>(getDataInt(pc + 2)) << 8)).c_str() );
+}
+
+#define GEN_OPCODE(x) if ( instruction.opcode == &NesApu::x ) opcode = # x
+#define GEN_ADDRMODE(x, y) if ( instruction.addrmode == &NesApu::x ) opcode += y
+
+static std::string hexToString( uint16_t hex )
+{
+    char str[6]{};
+    sprintf( str, "%04X", hex );
+    return str;
+}
+
+static std::string hexToString( uint8_t hex )
+{
+    char str[4]{};
+    sprintf( str, "%02X", hex );
+    return str;
+}
+
+std::string NesApu::getOpCode(const Instruction & instruction, uint16_t data)
+{
+    std::string opcode = "???";
+    GEN_OPCODE(ADC);
+    GEN_OPCODE(CLC);
+    GEN_OPCODE(BPL);
+    GEN_OPCODE(BEQ);
+    GEN_OPCODE(BNE);
+    GEN_OPCODE(BMI);
+    GEN_OPCODE(BCC);
+    GEN_OPCODE(BCS);
+    GEN_OPCODE(CMP);
+    GEN_OPCODE(CPX);
+    GEN_OPCODE(CPY);
+    GEN_OPCODE(JSR);
+    GEN_OPCODE(ASL);
+    GEN_OPCODE(INY);
+    GEN_OPCODE(LDA);
+    GEN_OPCODE(LDX);
+    GEN_OPCODE(LDY);
+    GEN_OPCODE(STA);
+    GEN_OPCODE(STX);
+    GEN_OPCODE(STY);
+    GEN_OPCODE(TAX);
+    GEN_OPCODE(TAY);
+    GEN_OPCODE(TXA);
+    GEN_OPCODE(TYA);
+    GEN_OPCODE(JMP);
+    GEN_OPCODE(RTS);
+    GEN_OPCODE(DEC);
+    GEN_OPCODE(INC);
+    GEN_OPCODE(DEX);
+    GEN_OPCODE(INX);
+    GEN_OPCODE(AND);
+    GEN_OPCODE(ORA);
+    GEN_OPCODE(EOR);
+    GEN_OPCODE(LSR);
+
+    GEN_ADDRMODE(UND, "");
+    GEN_ADDRMODE(IMD, " #" + hexToString( static_cast<uint8_t>( data ) ) );
+    GEN_ADDRMODE(ZP,  " $" + hexToString( static_cast<uint8_t>( data ) ) );
+    GEN_ADDRMODE(ZPX, " $" + hexToString( static_cast<uint8_t>( data ) ) + std::string(", X"));
+    GEN_ADDRMODE(ZPY, " $" + hexToString( static_cast<uint8_t>( data ) ) + std::string(", Y"));
+    GEN_ADDRMODE(ABS, " $" + hexToString( data ));
+    GEN_ADDRMODE(ABX, " $" + hexToString( static_cast<uint16_t>( data ) ) + std::string(", X"));
+    GEN_ADDRMODE(ABY, " $" + hexToString( static_cast<uint16_t>( data ) ) + std::string(", Y"));
+    GEN_ADDRMODE(REL, " $" + hexToString( static_cast<uint8_t>( data ) ));
+    GEN_ADDRMODE(IND, " ($" + hexToString( data ) + std::string(")"));
+    GEN_ADDRMODE(IDX, " ($" + hexToString( static_cast<uint8_t>(data) ) + std::string(", X)"));
+    GEN_ADDRMODE(IDY, " ($" + hexToString( static_cast<uint8_t>(data) ) + std::string("), Y"));
+    return opcode;
+}
+
+bool NesApu::executeInstruction()
+{
+    using c = NesApu;
+    static constexpr NesApu::Instruction commands[256] =
+    {
+/*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
+/* 0X */{ &c::UND, &c::UND }, { &c::ORA, &c::IDX }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ORA, &c::ZP  }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
+/* 0X */{ &c::UND, &c::UND }, { &c::ORA, &c::IMD }, { &c::ASL, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ORA, &c::ABS }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
+/* 1X */{ &c::BPL, &c::REL }, { &c::ORA, &c::IDY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ORA, &c::ZPX }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
+/* 1X */{ &c::CLC, &c::UND }, { &c::ORA, &c::ABY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ORA, &c::ABX }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
+/* 2X */{ &c::JSR, &c::ABS }, { &c::AND, &c::IDX }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::AND, &c::ZP  }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
+/* 2X */{ &c::UND, &c::UND }, { &c::AND, &c::IMD }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::AND, &c::ABS }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
+/* 3X */{ &c::BMI, &c::REL }, { &c::AND, &c::IDY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::AND, &c::ZPX }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
+/* 3X */{ &c::UND, &c::UND }, { &c::AND, &c::ABY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::AND, &c::ABX }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
+/* 4X */{ &c::UND, &c::UND }, { &c::EOR, &c::IDX }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::EOR, &c::ZP  }, { &c::LSR, &c::ZP  }, { &c::UND, &c::UND },
+/*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
+/* 4X */{ &c::UND, &c::UND }, { &c::EOR, &c::IMD }, { &c::LSR, &c::UND }, { &c::UND, &c::UND }, { &c::JMP, &c::ABS }, { &c::EOR, &c::ABS }, { &c::LSR, &c::ABS }, { &c::UND, &c::UND },
+/*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
+/* 5X */{ &c::UND, &c::UND }, { &c::EOR, &c::IDY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::EOR, &c::ZPX }, { &c::LSR, &c::ZPX }, { &c::UND, &c::UND },
+/*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
+/* 5X */{ &c::UND, &c::UND }, { &c::EOR, &c::ABY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::EOR, &c::ABX }, { &c::LSR, &c::ABX }, { &c::UND, &c::UND },
+/*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
+/* 6X */{ &c::RTS, &c::UND }, { &c::ADC, &c::IDX }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ADC, &c::ZP  }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
+/* 6X */{ &c::UND, &c::UND }, { &c::ADC, &c::IMD }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ADC, &c::ABS }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
+/* 7X */{ &c::UND, &c::UND }, { &c::ADC, &c::IDY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ADC, &c::ZPX }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
+/* 7X */{ &c::UND, &c::UND }, { &c::ADC, &c::ABY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ADC, &c::ABX }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
+/* 8X */{ &c::UND, &c::UND }, { &c::STA, &c::IDX }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::STY, &c::ZP  }, { &c::STA, &c::ZP  }, { &c::STX, &c::ZP  }, { &c::UND, &c::UND },
+/*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
+/* 8X */{ &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::TXA, &c::UND }, { &c::UND, &c::UND }, { &c::STY, &c::ABS }, { &c::STA, &c::ABS }, { &c::STX, &c::ABS }, { &c::UND, &c::UND },
+/*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
+/* 9X */{ &c::BCC, &c::REL }, { &c::STA, &c::IDY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::STY, &c::ZPX }, { &c::STA, &c::ZPX }, { &c::STX, &c::ZPY }, { &c::UND, &c::UND },
+/*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
+/* 9X */{ &c::TYA, &c::UND }, { &c::STA, &c::ABY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::STA, &c::ABX }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
+/* AX */{ &c::LDY, &c::IMD }, { &c::LDA, &c::IDX }, { &c::LDX, &c::IMD }, { &c::UND, &c::UND }, { &c::LDY, &c::ZP  }, { &c::LDA, &c::ZP  }, { &c::LDX, &c::ZP  }, { &c::UND, &c::UND },
+/*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
+/* AX */{ &c::TAY, &c::UND }, { &c::LDA, &c::IMD }, { &c::TAX, &c::UND }, { &c::UND, &c::UND }, { &c::LDY, &c::ABS }, { &c::LDA, &c::ABS }, { &c::LDX, &c::ABS }, { &c::UND, &c::UND },
+/*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
+/* BX */{ &c::BCS, &c::REL }, { &c::LDA, &c::IDY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::LDY, &c::ZPX }, { &c::LDA, &c::ZPX }, { &c::LDX, &c::ZPY }, { &c::UND, &c::UND },
+/*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
+/* BX */{ &c::UND, &c::UND }, { &c::LDA, &c::ABY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::LDY, &c::ABX }, { &c::LDA, &c::ABX }, { &c::LDX, &c::ABY }, { &c::UND, &c::UND },
+/*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
+/* CX */{ &c::CPY, &c::IMD }, { &c::CMP, &c::IDX }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::CPY, &c::ZP  }, { &c::CMP, &c::ZP  }, { &c::DEC, &c::ZP  }, { &c::UND, &c::UND },
+/*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
+/* CX */{ &c::INY, &c::UND }, { &c::CMP, &c::IMD }, { &c::DEX, &c::UND }, { &c::UND, &c::UND }, { &c::CPY, &c::ABS }, { &c::CMP, &c::ABS }, { &c::DEC, &c::ABS }, { &c::UND, &c::UND },
+/*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
+/* DX */{ &c::BNE, &c::REL }, { &c::CMP, &c::IDY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::CMP, &c::ZPX }, { &c::DEC, &c::ZPX }, { &c::UND, &c::UND },
+/*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
+/* DX */{ &c::UND, &c::UND }, { &c::CMP, &c::ABY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::CMP, &c::ABX }, { &c::DEC, &c::ABX }, { &c::UND, &c::UND },
+/*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
+/* EX */{ &c::CPX, &c::IMD }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::CPX, &c::ZP  }, { &c::UND, &c::UND }, { &c::INC, &c::ZP  }, { &c::UND, &c::UND },
+/*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
+/* EX */{ &c::INX, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::CPX, &c::ABS }, { &c::UND, &c::UND }, { &c::INC, &c::ABS }, { &c::UND, &c::UND },
+/*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
+/* FX */{ &c::BEQ, &c::REL }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::INC, &c::ZPX }, { &c::UND, &c::UND },
+/*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
+/* FX */{ &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::INC, &c::ABX }, { &c::UND, &c::UND },
+    };
+
+    uint16_t commandPc = m_cpu.pc;
+    uint8_t opcode = fetch();
+    bool result = true;
+    if ( commands[ opcode ].opcode == &c::UND )
+    {
+        LOG("Unknown instruction (0x%02X) detected at [0x%04X]\n", opcode, m_cpu.pc - 1);
+        result = false;
+    }
+    else
+    {
+        m_cpu.implied = false;
+        (this->*commands[ opcode ].addrmode)();
+        printCpuState( commands[ opcode ], commandPc );
+        (this->*commands[ opcode ].opcode)();
+    }
+    static int count = 0;
+    count++; if (count > 200000) return false;
+    return result;
+}
+
+int NesApu::callSubroutine(uint16_t addr)
+{
+    uint8_t sp = m_cpu.sp;
+    m_cpu.absAddr = addr;
+    JSR();
+    while ( sp != m_cpu.sp && executeInstruction( ) )
+    {
+    }
+    if ( sp == m_cpu.sp )
+    {
+        return 1;
+    }
+    // Error occured, set pc to problem instruction
+    m_cpu.pc--;
+    return 0;
+}
+
+void NesApu::BPL()
+{
+    if ( !(m_cpu.flags & N_FLAG) ) m_cpu.pc += m_cpu.relAddr;
+}
+
+void NesApu::ADC()
+{
+    uint8_t data = getData( m_cpu.absAddr );
+    uint16_t temp = (uint16_t)m_cpu.a + (uint16_t)data + (uint16_t)(( m_cpu.flags & C_FLAG ) ? 1: 0);
+    if ( temp > 255 ) m_cpu.flags |= C_FLAG; else m_cpu.flags &= ~C_FLAG;
+    modifyFlags( temp );
+    if ((~((uint16_t)m_cpu.a ^ (uint16_t)data) & ((uint16_t)m_cpu.a ^ (uint16_t)data)) & 0x0080)
+        m_cpu.flags |= V_FLAG;
+    else
+        m_cpu.flags &= ~V_FLAG;
+    m_cpu.a = temp & 0xFF;
+}
+
+void NesApu::TAX()
+{
+    m_cpu.x = m_cpu.a;
+    modifyFlags( m_cpu.x );
+}
+
+void NesApu::TAY()
+{
+    m_cpu.y = m_cpu.a;
+    modifyFlags( m_cpu.y );
+}
+
+void NesApu::TXA()
+{
+    m_cpu.a = m_cpu.x;
+    modifyFlags( m_cpu.a );
+}
+
+void NesApu::TYA()
+{
+    m_cpu.a = m_cpu.y;
+    modifyFlags( m_cpu.a );
+}
+
+void NesApu::INY()
+{
+    m_cpu.y++;
+    modifyFlags( m_cpu.y );
+}
+
+void NesApu::LDA()
+{
+    m_cpu.a = getData( m_cpu.absAddr );
+    modifyFlags( m_cpu.a );
+}
+
+void NesApu::ASL()
+{
+    uint8_t data = m_cpu.implied ? m_cpu.a : getData( m_cpu.absAddr );
+    m_cpu.flags &= ~(C_FLAG | Z_FLAG | N_FLAG);
+    m_cpu.flags |= (data & 0x80) ? C_FLAG : 0;
+    m_cpu.flags |= (data & 0x40) ? N_FLAG : 0;
+    m_cpu.flags |= (data & 0x7F) ? 0 : Z_FLAG;
+    data <<= 1;
+    if ( m_cpu.implied ) m_cpu.a = data; else setData( m_cpu.absAddr, data );
+}
+
+void NesApu::LSR()
+{
+    uint8_t data = m_cpu.implied ? m_cpu.a : getData( m_cpu.absAddr );
+    m_cpu.flags &= ~(C_FLAG | Z_FLAG | N_FLAG);
+    m_cpu.flags |= (data & 0x01) ? C_FLAG : 0;
+    m_cpu.flags |= (data == 1) ? Z_FLAG : 0;
+    data >>= 1;
+    if ( m_cpu.implied ) m_cpu.a = data; else setData( m_cpu.absAddr, data );
+}
+
+void NesApu::CLC()
+{
+    m_cpu.flags &= ~C_FLAG;
+}
+
+void NesApu::JMP()
+{
+    m_cpu.pc = m_cpu.absAddr;
+}
+
+void NesApu::JSR()
+{
+    uint16_t addr = m_cpu.pc - 1;
+    setData( m_cpu.sp-- + 0x100, addr >> 8 );
+    setData( m_cpu.sp-- + 0x100, addr & 0x00FF );
+    m_cpu.pc = m_cpu.absAddr;
+}
+
+void NesApu::RTS()
+{
+    uint16_t addr = getData( ++m_cpu.sp + 0x100 );
+    addr |= static_cast<uint16_t>(getData( ++m_cpu.sp + 0x100 )) << 8;
+    addr++;
+    m_cpu.pc = addr;
+}
+
+void NesApu::STA()
+{
+    setData( m_cpu.absAddr, m_cpu.a );
+}
+
+void NesApu::STX()
+{
+    setData( m_cpu.absAddr, m_cpu.x );
+}
+
+void NesApu::STY()
+{
+    setData( m_cpu.absAddr, m_cpu.y );
+}
+
+void NesApu::LDY()
+{
+    m_cpu.y = getData( m_cpu.absAddr );
+    modifyFlags( m_cpu.y );
+}
+
+void NesApu::LDX()
+{
+    m_cpu.x = getData( m_cpu.absAddr );
+    modifyFlags( m_cpu.x );
+}
+
+void NesApu::BEQ()
+{
+    if ( m_cpu.flags & Z_FLAG )
+    {
+        m_cpu.pc += m_cpu.relAddr;
+    }
+}
+
+void NesApu::BNE()
+{
+    if ( !(m_cpu.flags & Z_FLAG) )
+    {
+        m_cpu.pc += m_cpu.relAddr;
+    }
+}
+
+void NesApu::BMI()
+{
+    if ( m_cpu.flags & N_FLAG )
+    {
+        m_cpu.pc += m_cpu.relAddr;
+    }
+}
+
+void NesApu::BCC()
+{
+    if ( !(m_cpu.flags & C_FLAG) )
+    {
+        m_cpu.pc += m_cpu.relAddr;
+    }
+}
+
+void NesApu::BCS()
+{
+    if ( m_cpu.flags & C_FLAG )
+    {
+        m_cpu.pc += m_cpu.relAddr;
+    }
+}
+
+void NesApu::CMP()
+{
+    uint8_t data = getData( m_cpu.absAddr );
+    uint16_t temp = (uint16_t)m_cpu.a - (uint16_t)data;
+    if ( m_cpu.a >= data ) m_cpu.flags |= C_FLAG; else m_cpu.flags &= ~C_FLAG;
+    modifyFlags( temp & 0xFF );
+}
+
+void NesApu::CPX()
+{
+    uint8_t data = getData( m_cpu.absAddr );
+    uint16_t temp = (uint16_t)m_cpu.x - (uint16_t)data;
+    if ( m_cpu.x >= data ) m_cpu.flags |= C_FLAG; else m_cpu.flags &= ~C_FLAG;
+    modifyFlags( temp & 0xFF );
+}
+
+void NesApu::CPY()
+{
+    uint8_t data = getData( m_cpu.absAddr );
+    uint16_t temp = (uint16_t)m_cpu.y - (uint16_t)data;
+    if ( m_cpu.y >= data ) m_cpu.flags |= C_FLAG; else m_cpu.flags &= ~C_FLAG;
+    modifyFlags( temp & 0xFF );
+}
+
+void NesApu::DEC()
+{
+    uint8_t data = getData( m_cpu.absAddr ) - 1;
+    setData( m_cpu.absAddr, data );
+    modifyFlags( data );
+}
+
+void NesApu::INC()
+{
+    uint8_t data = getData( m_cpu.absAddr ) + 1;
+    setData( m_cpu.absAddr, data );
+    modifyFlags( data );
+}
+
+void NesApu::DEX()
+{
+    m_cpu.x--;
+    modifyFlags( m_cpu.x );
+}
+
+void NesApu::INX()
+{
+    m_cpu.x++;
+    modifyFlags( m_cpu.x );
+}
+
+void NesApu::AND()
+{
+    m_cpu.a &= getData( m_cpu.absAddr );
+    modifyFlags( m_cpu.a );
+}
+
+void NesApu::ORA()
+{
+    m_cpu.a |= getData( m_cpu.absAddr );
+    modifyFlags( m_cpu.a );
+}
+
+void NesApu::EOR()
+{
+    m_cpu.a ^= getData( m_cpu.absAddr );
+    modifyFlags( m_cpu.a );
 }

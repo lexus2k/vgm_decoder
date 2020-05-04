@@ -1,6 +1,6 @@
 #include "vgm_file.h"
 
-#define VGM_FILE_DEBUG 0
+#define VGM_FILE_DEBUG 1
 
 #if VGM_FILE_DEBUG
 #include <stdio.h>
@@ -37,7 +37,15 @@ void VgmFile::deleteChips()
     }
 }
 
-bool VgmFile::open(const uint8_t * vgmdata, int size)
+bool VgmFile::open(const uint8_t * data, int size)
+{
+    m_header = nullptr;
+    m_nsfHeader = nullptr;
+    if ( openVgm(data, size) ) return true;
+    return openNsf(data, size);
+}
+
+bool VgmFile::openVgm(const uint8_t * vgmdata, int size)
 {
     if ( size < sizeof(VgmHeader) )
     {
@@ -82,6 +90,7 @@ bool VgmFile::open(const uint8_t * vgmdata, int size)
         m_loops = 1;
     }
 
+    deleteChips();
     if ( m_header->ay8910Clock )
     {
         m_msxChip = new AY38910( m_header->ay8910Type, m_header->ay8910Flags );
@@ -107,6 +116,45 @@ bool VgmFile::open(const uint8_t * vgmdata, int size)
     LOG( "loop samples: %d\n", m_header->loopSamples );
     LOG( "loop modifier: %d\n", m_header->loopModifier );
     LOG( "loop base: %d\n", m_header->loopBase ); // NumLoops = NumLoopsModified - LoopBase
+    return true;
+}
+
+bool VgmFile::openNsf(const uint8_t * nsfdata, int size)
+{
+    if ( size < sizeof(NsfHeader) )
+    {
+        return false;
+    }
+    m_rawData = nsfdata;
+    m_size = size;
+    m_nsfHeader = reinterpret_cast<const NsfHeader *>(m_rawData);
+    m_dataPtr = m_rawData;
+    if ( m_nsfHeader->ident != 0x4D53454E )
+    {
+        LOG("%08X\n", m_nsfHeader->ident );
+        return false;
+    }
+    deleteChips();
+    m_nesChip = new NesApu();
+    m_nesChip->setDataBlock( m_nsfHeader->loadAddress, m_dataPtr + 0x80, size - 0x80 );
+    NesCpuState &cpu = m_nesChip->cpuState();
+    for (uint16_t i = 0; i < 0x07FF; i++) m_nesChip->setData(i, 0);
+    for (uint16_t i = 0x4000; i < 0x4013; i++) m_nesChip->setData(i, 0);
+    m_nesChip->setData(0x4015, 0x00);
+    m_nesChip->setData(0x4015, 0x0F);
+    m_nesChip->setData(0x4017, 0x40);
+    // f the tune is bank switched, load the bank values from $070-$077 into $5FF8-$5FFF.
+    cpu.x = 0; // ntsc
+    cpu.a = 0; // 0-index
+    cpu.sp = 0xFE;
+    if ( !m_nesChip->callSubroutine( m_nsfHeader->initAddress ) )
+    {
+        return false;
+    }
+    LOG( "Init complete \n" );
+    LOG( "Nsf NTSC rate: %d us\n", m_nsfHeader->ntscPlaySpeed );
+    m_samplesPlayed = 0;
+    m_waitSamples = 0;
     return true;
 }
 
@@ -350,6 +398,12 @@ void VgmFile::interpolateSample()
 
 int VgmFile::decodePcm(uint8_t *outBuffer, int maxSize)
 {
+    if ( m_nsfHeader ) return decodeNfsPcm(outBuffer, maxSize);
+    return decodeVgmPcm(outBuffer, maxSize);
+}
+
+int VgmFile::decodeVgmPcm(uint8_t *outBuffer, int maxSize)
+{
     int decoded = 0;
     while ( decoded + 4 <= maxSize )
     {
@@ -359,6 +413,40 @@ int VgmFile::decodePcm(uint8_t *outBuffer, int maxSize)
             {
                 return decoded;
             }
+        }
+        while ( m_waitSamples && (decoded + 4 <= maxSize) )
+        {
+            interpolateSample();
+
+            m_writeCounter += m_writeScaler;
+            m_waitSamples--;
+
+            if ( m_writeCounter >= VGM_SAMPLE_RATE )
+            {
+                *(reinterpret_cast<uint32_t *>(outBuffer)) = m_sampleSum;
+                outBuffer += 4;
+                decoded += 4;
+                m_writeCounter -= VGM_SAMPLE_RATE;
+                m_sampleSumValid = false;
+            }
+        }
+    }
+    return decoded;
+}
+
+int VgmFile::decodeNfsPcm(uint8_t *outBuffer, int maxSize)
+{
+    int decoded = 0;
+    while ( decoded + 4 <= maxSize )
+    {
+        if ( !m_waitSamples )
+        {
+            if ( !m_nesChip->callSubroutine( m_nsfHeader->playAddress ) )
+            {
+                 break;
+            }
+            m_waitSamples = (m_writeScaler * static_cast<uint32_t>( m_nsfHeader->ntscPlaySpeed )) / 1000000;
+            LOG( "Next block %d samples \n", m_waitSamples );
         }
         while ( m_waitSamples && (decoded + 4 <= maxSize) )
         {
