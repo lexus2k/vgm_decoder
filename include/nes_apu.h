@@ -136,6 +136,7 @@ private:
     void UND() { m_cpu.implied = true; };
     void BPL();
     void ADC();
+    void SBC();
     void TAX();
     void TAY();
     void TXA();
@@ -168,6 +169,9 @@ private:
     void ORA();
     void EOR();
     void LSR();
+    void PHA();
+    void PLA();
+    void SEC();
 
     // CPU Core
     void modifyFlags(uint8_t data);

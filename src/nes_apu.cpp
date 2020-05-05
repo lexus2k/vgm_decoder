@@ -4,13 +4,12 @@
 #include <stdio.h>
 
 #define NES_APU_DEBUG 1
+//#define DEBUG_NES_CPU
 
-#if NES_APU_DEBUG
-#include <stdio.h>
-#define LOG(...) fprintf( stderr, __VA_ARGS__ )
-#else
-#define LOG(...)
+#if NES_APU_DEBUG && !defined(VGM_DECODER_LOGGER)
+#define VGM_DECODER_LOGGER NES_APU_DEBUG
 #endif
+#include "vgm_logger.h"
 
 #define NES_CPU_FREQUENCY (1789773)
 #define SAMPLING_RATE  (44100)
@@ -156,6 +155,7 @@ void NesApu::reset()
 void NesApu::write(uint16_t reg, uint8_t val)
 {
     uint16_t originReg = reg;
+    LOGI( "Write 0x%02X to [%04X] reg\n", val, reg );
     reg = getRegIndex(reg);
     if ( reg < APU_MAX_REG )
     {
@@ -196,6 +196,9 @@ void NesApu::write(uint16_t reg, uint8_t val)
                 m_chan[chanIndex].sequencer = 0;
                 // Reset counter also to prevent unexpected clicks
                 m_chan[chanIndex].counter = 0;
+            }
+            if ( reg != APU_TRI_LEN )
+            {
                 m_chan[chanIndex].updateEnvelope = true;
             }
             if ( reg != APU_NOISE_LEN )
@@ -249,7 +252,11 @@ void NesApu::write(uint16_t reg, uint8_t val)
             m_apuFrames = 0;
             break;
         default:
-            fprintf(stderr, "Unknown reg 0x%02X [0x%04X]\n", reg, originReg);
+            // Check for sweep support on channels TRI and NOISE
+            if ( reg != 0x09 && reg != 0x0D )
+            {
+                LOGE( "Unknown reg 0x%02X [0x%04X]\n", reg, originReg );
+            }
             break;
     }
 }
@@ -273,7 +280,7 @@ void NesApu::setDataBlock( const uint8_t *data, uint32_t len )
 {
     if ( len < 2 )
     {
-        LOG("Invalid data - too short\n");
+        LOGE("Invalid data - too short\n");
         return;
     }
     uint16_t address = data[0] + (data[1] << 8);
@@ -284,7 +291,7 @@ void NesApu::setDataBlock( uint16_t addr, const uint8_t *data, uint32_t len )
 {
     if ( len < 2 )
     {
-        LOG("Invalid data - too short\n");
+        LOGE("Invalid data - too short\n");
         return;
     }
     int blockNumber = -1;
@@ -298,13 +305,13 @@ void NesApu::setDataBlock( uint16_t addr, const uint8_t *data, uint32_t len )
     }
     if ( blockNumber < 0 )
     {
-        LOG("Out of memory blocks\n");
+        LOGE("Out of memory blocks\n");
         return;
     }
     m_mem[ blockNumber ].data = data;
     m_mem[ blockNumber ].size = len;
     m_mem[ blockNumber ].addr = addr;
-    LOG("New data block [0x%04X] (len=%d)\n", addr, len);
+    LOGI("New data block [0x%04X] (len=%d)\n", addr, len);
 }
 
 uint32_t NesApu::getSample()
@@ -722,7 +729,7 @@ uint8_t NesApu::getData(uint16_t address)
     if ( address < 0x0800 )
     {
         if ( m_ram == nullptr ) m_ram = static_cast<uint8_t *>(malloc(2048));
-        printf("[%04X] ==> %02X\n", address, m_ram[address]);
+        LOGM("[%04X] ==> %02X\n", address, m_ram[address]);
         return m_ram[address];
     }
     else if ( address < 0x6000 )
@@ -733,14 +740,14 @@ uint8_t NesApu::getData(uint16_t address)
     {
         if ( m_mem[i].data == nullptr )
         {
-            LOG("Memory data fetch error 0x%04X\n", address);
+            LOGE("Memory data fetch error 0x%04X\n", address);
             return 0;
         }
         if ( address >= m_mem[i].addr &&
              address < m_mem[i].addr + m_mem[i].size )
         {
             uint16_t addr = address - m_mem[i].addr;
-            printf("[%04X] ==> %02X\n", address, m_mem[i].data[ addr ]);
+            LOGM("[%04X] ==> %02X\n", address, m_mem[i].data[ addr ]);
             return  m_mem[i].data[ addr ];
         }
     }
@@ -762,7 +769,7 @@ uint8_t NesApu::getDataInt(uint16_t address)
     {
         if ( m_mem[i].data == nullptr )
         {
-            LOG("Memory data fetch error 0x%04X\n", address);
+            LOGE("Memory data fetch error 0x%04X\n", address);
             return 0;
         }
         if ( address >= m_mem[i].addr &&
@@ -781,7 +788,7 @@ bool NesApu::setData(uint16_t address, uint8_t data)
     {
         if ( m_ram == nullptr ) m_ram = static_cast<uint8_t *>(malloc(2048));
         m_ram[address] = data;
-        printf("[%04X] <== %02X\n", address, m_ram[address]);
+        LOGM("[%04X] <== %02X\n", address, m_ram[address]);
         return true;
     }
     else if ( address < 0x6000 )
@@ -789,7 +796,7 @@ bool NesApu::setData(uint16_t address, uint8_t data)
         write( address, data );
         return true;
     }
-    LOG("Memory data write error (ROM) x%04X\n", address);
+    LOGE("Memory data write error (ROM) x%04X\n", address);
     return false;
 }
 
@@ -894,9 +901,11 @@ void NesApu::modifyFlags(uint8_t baseData)
 
 void NesApu::printCpuState(const Instruction & instruction, uint16_t pc)
 {
-    LOG("SP:%02X A:%02X X:%02X Y:%02X F:%02X [%04X] (0x%02X) %s\n",
+#ifdef DEBUG_NES_CPU
+    LOGI("SP:%02X A:%02X X:%02X Y:%02X F:%02X [%04X] (0x%02X) %s\n",
          m_cpu.sp, m_cpu.a, m_cpu.x, m_cpu.y, m_cpu.flags, pc, getDataInt( pc ),
          getOpCode( instruction, getDataInt(pc + 1) | (static_cast<uint16_t>(getDataInt(pc + 2)) << 8)).c_str() );
+#endif
 }
 
 #define GEN_OPCODE(x) if ( instruction.opcode == &NesApu::x ) opcode = # x
@@ -920,6 +929,7 @@ std::string NesApu::getOpCode(const Instruction & instruction, uint16_t data)
 {
     std::string opcode = "???";
     GEN_OPCODE(ADC);
+    GEN_OPCODE(SBC);
     GEN_OPCODE(CLC);
     GEN_OPCODE(BPL);
     GEN_OPCODE(BEQ);
@@ -953,6 +963,9 @@ std::string NesApu::getOpCode(const Instruction & instruction, uint16_t data)
     GEN_OPCODE(ORA);
     GEN_OPCODE(EOR);
     GEN_OPCODE(LSR);
+    GEN_OPCODE(PHA);
+    GEN_OPCODE(PLA);
+    GEN_OPCODE(SEC);
 
     GEN_ADDRMODE(UND, "");
     GEN_ADDRMODE(IMD, " #" + hexToString( static_cast<uint8_t>( data ) ) );
@@ -989,11 +1002,11 @@ bool NesApu::executeInstruction()
 /*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
 /* 3X */{ &c::BMI, &c::REL }, { &c::AND, &c::IDY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::AND, &c::ZPX }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
 /*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
-/* 3X */{ &c::UND, &c::UND }, { &c::AND, &c::ABY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::AND, &c::ABX }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/* 3X */{ &c::SEC, &c::UND }, { &c::AND, &c::ABY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::AND, &c::ABX }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
 /*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
 /* 4X */{ &c::UND, &c::UND }, { &c::EOR, &c::IDX }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::EOR, &c::ZP  }, { &c::LSR, &c::ZP  }, { &c::UND, &c::UND },
 /*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
-/* 4X */{ &c::UND, &c::UND }, { &c::EOR, &c::IMD }, { &c::LSR, &c::UND }, { &c::UND, &c::UND }, { &c::JMP, &c::ABS }, { &c::EOR, &c::ABS }, { &c::LSR, &c::ABS }, { &c::UND, &c::UND },
+/* 4X */{ &c::PHA, &c::UND }, { &c::EOR, &c::IMD }, { &c::LSR, &c::UND }, { &c::UND, &c::UND }, { &c::JMP, &c::ABS }, { &c::EOR, &c::ABS }, { &c::LSR, &c::ABS }, { &c::UND, &c::UND },
 /*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
 /* 5X */{ &c::UND, &c::UND }, { &c::EOR, &c::IDY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::EOR, &c::ZPX }, { &c::LSR, &c::ZPX }, { &c::UND, &c::UND },
 /*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
@@ -1001,7 +1014,7 @@ bool NesApu::executeInstruction()
 /*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
 /* 6X */{ &c::RTS, &c::UND }, { &c::ADC, &c::IDX }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ADC, &c::ZP  }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
 /*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
-/* 6X */{ &c::UND, &c::UND }, { &c::ADC, &c::IMD }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ADC, &c::ABS }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/* 6X */{ &c::PLA, &c::UND }, { &c::ADC, &c::IMD }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ADC, &c::ABS }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
 /*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
 /* 7X */{ &c::UND, &c::UND }, { &c::ADC, &c::IDY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ADC, &c::ZPX }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
 /*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
@@ -1031,13 +1044,13 @@ bool NesApu::executeInstruction()
 /*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
 /* DX */{ &c::UND, &c::UND }, { &c::CMP, &c::ABY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::CMP, &c::ABX }, { &c::DEC, &c::ABX }, { &c::UND, &c::UND },
 /*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
-/* EX */{ &c::CPX, &c::IMD }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::CPX, &c::ZP  }, { &c::UND, &c::UND }, { &c::INC, &c::ZP  }, { &c::UND, &c::UND },
+/* EX */{ &c::CPX, &c::IMD }, { &c::SBC, &c::IDX }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::CPX, &c::ZP  }, { &c::SBC, &c::ZP  }, { &c::INC, &c::ZP  }, { &c::UND, &c::UND },
 /*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
-/* EX */{ &c::INX, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::CPX, &c::ABS }, { &c::UND, &c::UND }, { &c::INC, &c::ABS }, { &c::UND, &c::UND },
+/* EX */{ &c::INX, &c::UND }, { &c::SBC, &c::IMD }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::CPX, &c::ABS }, { &c::SBC, &c::ABS }, { &c::INC, &c::ABS }, { &c::UND, &c::UND },
 /*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
-/* FX */{ &c::BEQ, &c::REL }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::INC, &c::ZPX }, { &c::UND, &c::UND },
+/* FX */{ &c::BEQ, &c::REL }, { &c::SBC, &c::IDY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::SBC, &c::ZPX }, { &c::INC, &c::ZPX }, { &c::UND, &c::UND },
 /*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
-/* FX */{ &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::INC, &c::ABX }, { &c::UND, &c::UND },
+/* FX */{ &c::UND, &c::UND }, { &c::SBC, &c::ABY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::SBC, &c::ABX }, { &c::INC, &c::ABX }, { &c::UND, &c::UND },
     };
 
     uint16_t commandPc = m_cpu.pc;
@@ -1045,7 +1058,7 @@ bool NesApu::executeInstruction()
     bool result = true;
     if ( commands[ opcode ].opcode == &c::UND )
     {
-        LOG("Unknown instruction (0x%02X) detected at [0x%04X]\n", opcode, m_cpu.pc - 1);
+        LOGE("Unknown instruction (0x%02X) detected at [0x%04X]\n", opcode, m_cpu.pc - 1);
         result = false;
     }
     else
@@ -1055,8 +1068,8 @@ bool NesApu::executeInstruction()
         printCpuState( commands[ opcode ], commandPc );
         (this->*commands[ opcode ].opcode)();
     }
-    static int count = 0;
-    count++; if (count > 200000) return false;
+//    static int count = 0;
+//    count++; if (count > 2000000) return false;
     return result;
 }
 
@@ -1085,6 +1098,19 @@ void NesApu::BPL()
 void NesApu::ADC()
 {
     uint8_t data = getData( m_cpu.absAddr );
+    uint16_t temp = (uint16_t)m_cpu.a + (uint16_t)data + (uint16_t)(( m_cpu.flags & C_FLAG ) ? 1: 0);
+    if ( temp > 255 ) m_cpu.flags |= C_FLAG; else m_cpu.flags &= ~C_FLAG;
+    modifyFlags( temp );
+    if ((~((uint16_t)m_cpu.a ^ (uint16_t)data) & ((uint16_t)m_cpu.a ^ (uint16_t)data)) & 0x0080)
+        m_cpu.flags |= V_FLAG;
+    else
+        m_cpu.flags &= ~V_FLAG;
+    m_cpu.a = temp & 0xFF;
+}
+
+void NesApu::SBC()
+{
+    uint16_t data = static_cast<uint16_t>(getData( m_cpu.absAddr )) ^ 0x00FF;
     uint16_t temp = (uint16_t)m_cpu.a + (uint16_t)data + (uint16_t)(( m_cpu.flags & C_FLAG ) ? 1: 0);
     if ( temp > 255 ) m_cpu.flags |= C_FLAG; else m_cpu.flags &= ~C_FLAG;
     modifyFlags( temp );
@@ -1155,6 +1181,16 @@ void NesApu::LSR()
 void NesApu::CLC()
 {
     m_cpu.flags &= ~C_FLAG;
+}
+
+void NesApu::PHA()
+{
+    setData( m_cpu.sp-- + 0x100, m_cpu.a );
+}
+
+void NesApu::PLA()
+{
+    m_cpu.a = getData( ++m_cpu.sp + 0x100 );
 }
 
 void NesApu::JMP()
@@ -1311,4 +1347,9 @@ void NesApu::EOR()
 {
     m_cpu.a ^= getData( m_cpu.absAddr );
     modifyFlags( m_cpu.a );
+}
+
+void NesApu::SEC()
+{
+    m_cpu.flags |= C_FLAG;
 }

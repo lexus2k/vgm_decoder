@@ -5,12 +5,10 @@
 
 #define AY38910_DEBUG 0
 
-#if AY38910_DEBUG
-#include <stdio.h>
-#define LOG(...) fprintf( stderr, __VA_ARGS__ )
-#else
-#define LOG(...)
+#if AY38910_DEBUG && !defined(VGM_DECODER_LOGGER)
+#define VGM_DECODER_LOGGER 1
 #endif
+#include "vgm_logger.h"
 
 
 #define YM2149_PIN26_LOW   (0x10)

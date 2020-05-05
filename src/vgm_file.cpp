@@ -2,12 +2,10 @@
 
 #define VGM_FILE_DEBUG 1
 
-#if VGM_FILE_DEBUG
-#include <stdio.h>
-#define LOG(...) fprintf( stderr, __VA_ARGS__ )
-#else
-#define LOG(...)
+#if VGM_FILE_DEBUG && !defined(VGM_DECODER_LOGGER)
+#define VGM_DECODER_LOGGER VGM_FILE_DEBUG
 #endif
+#include "vgm_logger.h"
 
 /** Vgm file are always based on 44.1kHz rate */
 #define VGM_SAMPLE_RATE 44100
@@ -47,6 +45,7 @@ bool VgmFile::open(const uint8_t * data, int size)
 
 bool VgmFile::openVgm(const uint8_t * vgmdata, int size)
 {
+    close();
     if ( size < sizeof(VgmHeader) )
     {
         return false;
@@ -121,6 +120,7 @@ bool VgmFile::openVgm(const uint8_t * vgmdata, int size)
 
 bool VgmFile::openNsf(const uint8_t * nsfdata, int size)
 {
+    close();
     if ( size < sizeof(NsfHeader) )
     {
         return false;
@@ -131,23 +131,14 @@ bool VgmFile::openNsf(const uint8_t * nsfdata, int size)
     m_dataPtr = m_rawData;
     if ( m_nsfHeader->ident != 0x4D53454E )
     {
-        LOG("%08X\n", m_nsfHeader->ident );
+        LOGE("%08X\n", m_nsfHeader->ident );
         return false;
     }
     deleteChips();
     m_nesChip = new NesApu();
     m_nesChip->setDataBlock( m_nsfHeader->loadAddress, m_dataPtr + 0x80, size - 0x80 );
-    NesCpuState &cpu = m_nesChip->cpuState();
-    for (uint16_t i = 0; i < 0x07FF; i++) m_nesChip->setData(i, 0);
-    for (uint16_t i = 0x4000; i < 0x4013; i++) m_nesChip->setData(i, 0);
-    m_nesChip->setData(0x4015, 0x00);
-    m_nesChip->setData(0x4015, 0x0F);
-    m_nesChip->setData(0x4017, 0x40);
-    // f the tune is bank switched, load the bank values from $070-$077 into $5FF8-$5FFF.
-    cpu.x = 0; // ntsc
-    cpu.a = 0; // 0-index
-    cpu.sp = 0xFE;
-    if ( !m_nesChip->callSubroutine( m_nsfHeader->initAddress ) )
+
+    if ( !setTrack( 0 ) )
     {
         return false;
     }
@@ -156,6 +147,14 @@ bool VgmFile::openNsf(const uint8_t * nsfdata, int size)
     m_samplesPlayed = 0;
     m_waitSamples = 0;
     return true;
+}
+
+void VgmFile::close()
+{
+    m_nsfHeader = nullptr;
+    m_header = nullptr;
+    m_rawData = nullptr;
+    m_samplesPlayed = 0;
 }
 
 
@@ -352,8 +351,8 @@ bool VgmFile::nextCommand()
                 m_dataPtr += 5;
                 break;
             }
-            LOG( "Unknown command (0x%02X) is detected at position 0x%08X \n",
-                     *m_dataPtr, static_cast<uint32_t>(m_dataPtr - m_rawData) );
+            LOGE( "Unknown command (0x%02X) is detected at position 0x%08X \n",
+                  *m_dataPtr, static_cast<uint32_t>(m_dataPtr - m_rawData) );
             return false;
     }
     LOG("\n");
@@ -364,6 +363,40 @@ void VgmFile::setVolume( uint16_t volume )
 {
     if ( m_msxChip ) m_msxChip->setVolume( volume );
     if ( m_nesChip ) m_nesChip->setVolume( volume );
+}
+
+int VgmFile::getTrackCount()
+{
+    // read nsf track count
+    if ( m_nsfHeader ) return m_nsfHeader->songIndex;
+    // No tracks for VGM file format
+    return 1;
+}
+
+bool VgmFile::setTrack(int track)
+{
+    // For vgm files this is not supported
+    if ( m_header ) return true;
+    if ( !m_nsfHeader ) return false;
+
+    // Reset NES CPU memory and state
+    NesCpuState &cpu = m_nesChip->cpuState();
+    for (uint16_t i = 0; i < 0x07FF; i++) m_nesChip->setData(i, 0);
+    for (uint16_t i = 0x4000; i < 0x4013; i++) m_nesChip->setData(i, 0);
+    m_nesChip->setData(0x4015, 0x00);
+    m_nesChip->setData(0x4015, 0x0F);
+    m_nesChip->setData(0x4017, 0x40);
+    // if the tune is bank switched, load the bank values from $070-$077 into $5FF8-$5FFF.
+    cpu.x = 0; // ntsc
+    cpu.a = track < m_nsfHeader->songIndex ? track: 0;
+    cpu.sp = 0xEF;
+    if ( !m_nesChip->callSubroutine( m_nsfHeader->initAddress ) )
+    {
+        LOGE( "Failed to call init subroutine for NSF file" );
+        return false;
+    }
+    m_samplesPlayed = 0;
+    return true;
 }
 
 typedef struct
@@ -413,6 +446,12 @@ int VgmFile::decodeVgmPcm(uint8_t *outBuffer, int maxSize)
             {
                 return decoded;
             }
+            if ( m_waitSamples )
+            {
+                LOGI( "Next block %d samples [%d.%03d - %d.%03d]\n", m_waitSamples,
+                   m_samplesPlayed / m_writeScaler, 1000 * (m_samplesPlayed % m_writeScaler) / m_writeScaler,
+                   (m_samplesPlayed + m_waitSamples) / m_writeScaler, 1000 * ((m_samplesPlayed + m_waitSamples) % m_writeScaler) / m_writeScaler );
+            }
         }
         while ( m_waitSamples && (decoded + 4 <= maxSize) )
         {
@@ -428,6 +467,7 @@ int VgmFile::decodeVgmPcm(uint8_t *outBuffer, int maxSize)
                 decoded += 4;
                 m_writeCounter -= VGM_SAMPLE_RATE;
                 m_sampleSumValid = false;
+                m_samplesPlayed++;
             }
         }
     }
@@ -441,12 +481,20 @@ int VgmFile::decodeNfsPcm(uint8_t *outBuffer, int maxSize)
     {
         if ( !m_waitSamples )
         {
+            if ( m_samplesPlayed > 3 * 60 * static_cast<uint32_t>(m_writeScaler) )
+            {
+                LOGI("m_samplesPlayed: %d\n", m_samplesPlayed);
+                break; // TODO: 3 minutes limit
+            }
             if ( !m_nesChip->callSubroutine( m_nsfHeader->playAddress ) )
             {
-                 break;
+                LOGE( "Failed to call play subroutine, stopping\n" );
+                break;
             }
             m_waitSamples = (m_writeScaler * static_cast<uint32_t>( m_nsfHeader->ntscPlaySpeed )) / 1000000;
-            LOG( "Next block %d samples \n", m_waitSamples );
+            LOGI( "Next block %d samples [%d.%03d - %d.%03d]\n", m_waitSamples,
+                   m_samplesPlayed / m_writeScaler, 1000 * (m_samplesPlayed % m_writeScaler) / m_writeScaler,
+                   (m_samplesPlayed + m_waitSamples) / m_writeScaler, 1000 * ((m_samplesPlayed + m_waitSamples) % m_writeScaler) / m_writeScaler );
         }
         while ( m_waitSamples && (decoded + 4 <= maxSize) )
         {
@@ -462,6 +510,7 @@ int VgmFile::decodeNfsPcm(uint8_t *outBuffer, int maxSize)
                 decoded += 4;
                 m_writeCounter -= VGM_SAMPLE_RATE;
                 m_sampleSumValid = false;
+                m_samplesPlayed++;
             }
         }
     }
@@ -473,6 +522,6 @@ void VgmFile::setSampleFrequency( uint32_t frequency )
     m_writeScaler = frequency;
     if ( m_msxChip && m_msxChip->getSampleFrequency() != VGM_SAMPLE_RATE )
     {
-        LOG( "Error: chip must run at 44100 Hz sample frequency!!!\n" );
+        LOGE( "Error: chip must run at 44100 Hz sample frequency!!!\n" );
     }
 }

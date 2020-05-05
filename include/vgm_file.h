@@ -107,22 +107,33 @@ public:
     VgmFile();
     ~VgmFile();
 
-    /** Allows to open NSF and VGM data files */
+    /** Allows to open NSF and VGM data blocks */
     bool open(const uint8_t *data, int size);
 
-    void close() {}
+    /** Closes either VGM or NSF data */
+    void close();
 
-    bool nextCommand();
-
+    /**
+     * Decodes next block and fill pcm buffer.
+     * If there is not more data to play returns size less than maxSize.
+     * outBuffer is filled up with 16-bit unsigned PCM for 2 channels (stereo).
+     */
     int decodePcm(uint8_t *outBuffer, int maxSize);
 
-    AY38910 *getMsxChip() { return m_msxChip; }
-    NesApu *getNesChip() { return m_nesChip; }
-
+    /** Sets sampling frequency. ,Must be called before decodePcm */
     void setSampleFrequency( uint32_t frequency );
 
     /** Sets volume, default level is 64 */
     void setVolume(uint16_t volume);
+
+    /** Returns number of tracks in opened file */
+    int getTrackCount();
+
+    /** Sets track to play */
+    bool setTrack(int track);
+
+    AY38910 *getMsxChip() { return m_msxChip; }
+    NesApu *getNesChip() { return m_nesChip; }
 
 private:
     const uint8_t * m_rawData = nullptr;
@@ -160,4 +171,6 @@ private:
 
     int decodeNfsPcm(uint8_t *outBuffer, int maxSize);
     int decodeVgmPcm(uint8_t *outBuffer, int maxSize);
+
+    bool nextCommand();
 };

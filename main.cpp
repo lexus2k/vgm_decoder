@@ -35,6 +35,7 @@ void writeFile(const char *name, VgmFile *vgm)
     }
     vgm->setVolume( 128 );
     vgm->setSampleFrequency( 44100 );
+    vgm->setTrack( 1 );
     for(;;)
     {
         int size = vgm->decodePcm(buffer, sizeof(buffer));
@@ -45,7 +46,10 @@ void writeFile(const char *name, VgmFile *vgm)
             *reinterpret_cast<int16_t *>(buffer+i) = *reinterpret_cast<uint16_t *>(buffer+i) - 32768;
         }
         fwrite( buffer, size, 1, fileptr );
-        if ( size < 1024 ) break;
+        if ( size < 1024 )
+        {
+            break;
+        }
     }
     fclose(fileptr);
 }
@@ -71,6 +75,6 @@ int main(int argc, char *argv[])
         return -1;
     }
     writeFile( argv[2], &file );
-    fprintf(stderr, "DONE \n");
+    fprintf(stderr, "DONE\n");
     return 0;
 }
