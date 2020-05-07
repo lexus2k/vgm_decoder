@@ -89,7 +89,6 @@ bool VgmFile::openVgm(const uint8_t * vgmdata, int size)
         m_loops = 1;
     }
 
-    deleteChips();
     if ( m_header->ay8910Clock )
     {
         m_msxChip = new AY38910( m_header->ay8910Type, m_header->ay8910Flags );
@@ -134,9 +133,7 @@ bool VgmFile::openNsf(const uint8_t * nsfdata, int size)
         LOGE("%08X\n", m_nsfHeader->ident );
         return false;
     }
-    deleteChips();
     m_nesChip = new NesApu();
-    m_nesChip->setDataBlock( m_nsfHeader->loadAddress, m_dataPtr + 0x80, size - 0x80 );
 
     if ( !setTrack( 0 ) )
     {
@@ -155,6 +152,7 @@ void VgmFile::close()
     m_header = nullptr;
     m_rawData = nullptr;
     m_samplesPlayed = 0;
+    deleteChips();
 }
 
 
@@ -379,6 +377,17 @@ bool VgmFile::setTrack(int track)
     if ( m_header ) return true;
     if ( !m_nsfHeader ) return false;
 
+    m_nesChip->reset();
+    m_nesChip->setDataBlock( m_nsfHeader->loadAddress, m_dataPtr + 0x80, m_size - 0x80 );
+    bool useBanks = false;
+    for (int i=0; i<8; i++)
+        if ( m_nsfHeader->bankSwitch[i] )
+            useBanks = true;
+    if ( useBanks )
+    {
+        for (int i=0; i<8; i++)
+            m_nesChip->write( 0x5FF8 + i, m_nsfHeader->bankSwitch[i] );
+    }
     // Reset NES CPU memory and state
     NesCpuState &cpu = m_nesChip->cpuState();
     for (uint16_t i = 0; i < 0x07FF; i++) m_nesChip->setData(i, 0);
@@ -392,7 +401,7 @@ bool VgmFile::setTrack(int track)
     cpu.sp = 0xEF;
     if ( !m_nesChip->callSubroutine( m_nsfHeader->initAddress ) )
     {
-        LOGE( "Failed to call init subroutine for NSF file" );
+        LOGE( "Failed to call init subroutine for NSF file\n" );
         return false;
     }
     m_samplesPlayed = 0;

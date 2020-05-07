@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#define AY38910_DEBUG 0
+#define AY38910_DEBUG 1
 
 #if AY38910_DEBUG && !defined(VGM_DECODER_LOGGER)
 #define VGM_DECODER_LOGGER 1
@@ -208,7 +208,7 @@ uint16_t AY38910::read(uint8_t reg)
 
 void AY38910::write(uint8_t reg, uint16_t value)
 {
-    LOG( ">> reg: %d = 0x%02X\n", reg, value);
+    LOGI( ">> reg: %d = 0x%02X\n", reg, value);
     switch (reg)
     {
     case FTR_A:
@@ -246,22 +246,15 @@ void AY38910::write(uint8_t reg, uint16_t value)
         // For YM2149 type chips there 32 levels instead of 16
         if ( m_chipType & 0xF0 ) m_amplitude[channel] <<= 1;
         m_useEnvelope[channel] = ((value & 0x10) != 0);
-        if ( m_useEnvelope[channel] )
-        {
-            LOG( "-----------channel: %d\n", channel);
-        }
         break;
     }
     case R_FPC_E:
         m_periodE = ((m_periodE & 0xff0000) | (value << 8));
-        LOG( "*********ENV: %08X\n", m_periodE >> 8 );
         break;
     case R_CPC_E:
         m_periodE = ((value << 16) | (m_periodE & 0x00ff00));
-        LOG( "*********ENV: %08X\n", m_periodE >> 8 );
         break;
     case R_ENVELOPE:
-        LOG( "*********ENV MODE\n");
         m_envelopeReg = value;
         m_holding = false;
         m_hold = !!(value & 0x01); // true means one cycle only
@@ -278,7 +271,7 @@ void AY38910::write(uint8_t reg, uint16_t value)
     case R_RS232_B:
         break;
     default:
-        LOG( "Unknown register %02X\n", reg );
+        LOGE( "Unknown register %02X\n", reg );
         break;
     }
 }

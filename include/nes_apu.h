@@ -4,7 +4,7 @@
 #include <string>
 
 #define APU_MAX_REG   (0x30)
-#define APU_MAX_MEMORY_BLOCKS (0x10)
+#define APU_MAX_MEMORY_BLOCKS (4)
 
 typedef struct
 {
@@ -51,8 +51,8 @@ typedef struct
 typedef struct
 {
     const uint8_t *data;
-    uint16_t addr;
-    uint16_t size;
+    uint32_t addr;
+    uint32_t size;
 } NesMemoryBlock;
 
 
@@ -75,7 +75,7 @@ public:
     void reset();
 
     void setDataBlock( const uint8_t *data, uint32_t len );
-    void setDataBlock( uint16_t addr, const uint8_t *data, uint32_t len );
+    void setDataBlock( uint32_t addr, const uint8_t *data, uint32_t len );
 
     bool executeInstruction();
     int callSubroutine(uint16_t addr);
@@ -109,6 +109,7 @@ private:
 
     NesCpuState m_cpu{};
     uint8_t *m_ram = nullptr;
+    uint8_t m_bank[8];
 
     // APU Processing
     void updateRectChannel(int i);
@@ -164,11 +165,15 @@ private:
     void DEC();
     void INC();
     void DEX();
+    void DEY();
     void INX();
     void AND();
     void ORA();
     void EOR();
+    void NOP();
     void LSR();
+    void ROR();
+    void ROL();
     void PHA();
     void PLA();
     void SEC();

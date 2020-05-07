@@ -23,23 +23,33 @@ int readFile(const char *name, uint8_t **buffer )
     return filelen;
 }
 
-void writeFile(const char *name, VgmFile *vgm)
+int writeFile(const char *name, VgmFile *vgm, int trackIndex)
 {
     uint8_t buffer[1024];
     FILE *fileptr;
 
+    if ( trackIndex >= vgm->getTrackCount() )
+    {
+        fprintf( stderr, "Source sound file has only %d tracks\n", vgm->getTrackCount() );
+        return -1;
+    }
+
     fileptr = fopen(name, "wb");
     if ( fileptr == nullptr )
     {
-        return;
+        fprintf( stderr, "Failed to open file %s \n", name );
+        return -1;
     }
     vgm->setVolume( 128 );
     vgm->setSampleFrequency( 44100 );
-    vgm->setTrack( 1 );
+    vgm->setTrack( trackIndex );
     for(;;)
     {
         int size = vgm->decodePcm(buffer, sizeof(buffer));
-        if ( size < 0 ) break;
+        if ( size < 0 )
+        {
+            break;
+        }
         for (int i = 0; i<sizeof(buffer); i+=2)
         {
             // Convert unsigned PCM16 to signed PCM16
@@ -52,14 +62,20 @@ void writeFile(const char *name, VgmFile *vgm)
         }
     }
     fclose(fileptr);
+    return 0;
 }
 
 int main(int argc, char *argv[])
 {
+    int trackIndex = 0;
     if (argc < 3)
     {
-        fprintf(stderr, "Usage: vgm2pcm input output\n");
+        fprintf(stderr, "Usage: vgm2pcm input output [track_index]\n");
         return -1;
+    }
+    if (argc > 3)
+    {
+        trackIndex = strtoul(argv[3], nullptr, 10);
     }
     uint8_t *data;
     int size = readFile( argv[1], &data );
@@ -74,7 +90,10 @@ int main(int argc, char *argv[])
         fprintf( stderr, "Failed to parse vgm data %s \n", argv[1] );
         return -1;
     }
-    writeFile( argv[2], &file );
+    if ( writeFile( argv[2], &file, trackIndex ) < 0 )
+    {
+        return -1;
+    }
     fprintf(stderr, "DONE\n");
     return 0;
 }
