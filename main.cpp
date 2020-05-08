@@ -3,6 +3,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+typedef struct
+{
+    uint32_t chunkId; // 0x52494646
+    uint32_t chunkSize; //  36 + SubChunk2Size, or more precisely: 4 + (8 + SubChunk1Size) + (8 + SubChunk2Size)
+    uint32_t format; // 0x57415645
+    uint32_t subchunk1Id; // 0x666d7420
+    uint32_t subchunk1Size; // 16
+    uint16_t audioFormat; // 1 - PCM
+    uint16_t numChannels; // 2
+    uint32_t sampleRate; // 44100
+    uint32_t byteRate; // == SampleRate * NumChannels * BitsPerSample/8
+    uint16_t blockAlign; // == NumChannels * BitsPerSample/8
+    uint16_t bitsPerSample; // 16
+    uint32_t subchunk2Id; // 0x64617461
+    uint32_t subchunk2Size; // in bytes
+} WaveHeader;
+
 
 int readFile(const char *name, uint8_t **buffer )
 {
@@ -40,6 +57,13 @@ int writeFile(const char *name, VgmFile *vgm, int trackIndex)
         fprintf( stderr, "Failed to open file %s \n", name );
         return -1;
     }
+    WaveHeader header =
+    {
+        0x46464952, 0, 0x45564157,
+        0x20746d66, 16, 1, 2, 44100, 44100 * 2 * (16 / 8), 2 * (16 / 8), 16,
+        0x61746164, 0
+    };
+    fwrite( &header, sizeof(header), 1, fileptr );
     vgm->setVolume( 128 );
     vgm->setSampleFrequency( 44100 );
     vgm->setTrack( trackIndex );
@@ -61,6 +85,11 @@ int writeFile(const char *name, VgmFile *vgm, int trackIndex)
             break;
         }
     }
+    int totalSize = ftell( fileptr );
+    header.subchunk2Size = totalSize - sizeof(header);
+    header.chunkSize = totalSize - 8;
+    fseek(fileptr, 0, SEEK_SET);
+    fwrite( &header, sizeof(header), 1, fileptr );
     fclose(fileptr);
     return 0;
 }
@@ -70,6 +99,7 @@ int main(int argc, char *argv[])
     int trackIndex = 0;
     if (argc < 3)
     {
+        fprintf(stderr, "Converts NSF or VGM files to wav data\n");
         fprintf(stderr, "Usage: vgm2pcm input output [track_index]\n");
         return -1;
     }

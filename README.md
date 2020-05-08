@@ -1,4 +1,17 @@
 # vgm_converter
 
-It recognizes vgm files for AY-3-8910, YM2149 (MSX2) and NES APU (Nes console).
-The library allows to get PCM stream from VGM data.
+The library can be used to convert VGM / NSF data to PCM on the fly.
+
+It recognizes:
+ * vgm files (AY-3-8910, YM2149 (MSX2) and NES APU (Nes console))
+ * nsf files (Nintendo Sound Format - NES APU)
+
+# Compilation
+
+> make
+
+> ./vgm2pcm
+
+# Links
+
+Wonderful resources for NSF files: https://www.zophar.net/music, for VGM files: https://vgmrips.net
