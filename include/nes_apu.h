@@ -114,7 +114,7 @@ private:
     // APU Processing
     void updateRectChannel(int i);
     void updateTriangleChannel(ChannelInfo &info);
-    void updateNoiseChannel(int i);
+    void updateNoiseChannel(ChannelInfo &chan);
     void updateDmcChannel(ChannelInfo &info);
     void updateFrameCounter();
 
@@ -180,6 +180,6 @@ private:
 
     // CPU Core
     void modifyFlags(uint8_t data);
-    uint8_t fetch();
+    uint8_t fetch() { return getData( m_cpu.pc++ ); }
     void printCpuState( const Instruction & instruction, uint16_t pc );
 };

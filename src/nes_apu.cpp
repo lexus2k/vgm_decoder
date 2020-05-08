@@ -330,7 +330,7 @@ uint32_t NesApu::getSample()
     updateRectChannel(0);
     updateRectChannel(1);
     updateTriangleChannel(m_chan[2]);
-    updateNoiseChannel(3);
+    updateNoiseChannel(m_chan[3]);
     updateDmcChannel(m_chan[4]);
 
     uint32_t sample = 0;
@@ -364,6 +364,7 @@ uint32_t NesApu::getSample()
 
 void NesApu::updateRectChannel(int i)
 {
+    ChannelInfo &chan = m_chan[i];
     static constexpr uint8_t sequencerTable[] =
     {
         0b01000000,
@@ -374,8 +375,8 @@ void NesApu::updateRectChannel(int i)
 
     if (!(m_regs[APU_STATUS] & (1<<i)))
     {
-        m_chan[i].volume = 0;
-        m_chan[i].output = m_volTable[ m_chan[i].volume ];
+        chan.volume = 0;
+        chan.output = m_volTable[ chan.volume ];
         return;
     }
 
@@ -385,65 +386,65 @@ void NesApu::updateRectChannel(int i)
     // So, run the envelope anyway
     if ( m_quaterSignal )
     {
-        if ( m_chan[i].updateEnvelope )
+        if ( chan.updateEnvelope )
         {
-            m_chan[i].decayCounter = 0x0F;
-            m_chan[i].divider = volumeReg & VALUE_VOL_MASK;
-            m_chan[i].updateEnvelope = false;
+            chan.decayCounter = 0x0F;
+            chan.divider = volumeReg & VALUE_VOL_MASK;
+            chan.updateEnvelope = false;
         }
-        else if (m_chan[i].divider)
+        else if (chan.divider)
         {
-            m_chan[i].divider--;
+            chan.divider--;
         }
         else
         {
-            m_chan[i].divider = volumeReg & VALUE_VOL_MASK;
-            if (m_chan[i].decayCounter)
+            chan.divider = volumeReg & VALUE_VOL_MASK;
+            if (chan.decayCounter)
             {
-                m_chan[i].decayCounter--;
+                chan.decayCounter--;
             }
             else if (volumeReg & ENABLE_LOOP_MASK)
             {
-                m_chan[i].decayCounter = 0x0F;
+                chan.decayCounter = 0x0F;
             }
         }
     }
     if ( volumeReg & FIXED_VOL_MASK ) // fixed volume
     {
-        m_chan[i].volume = volumeReg & VALUE_VOL_MASK;
+        chan.volume = volumeReg & VALUE_VOL_MASK;
     }
     else
     {
-        m_chan[i].volume = m_chan[i].decayCounter;
+        chan.volume = chan.decayCounter;
     }
     // Countdown len counter if enabled
     if ( !(volumeReg & DISABLE_LEN_MASK) )
     {
-        if (m_chan[i].lenCounter && m_fullSignal) // once per frame
+        if (chan.lenCounter && m_fullSignal) // once per frame
         {
-            m_chan[i].lenCounter--;
+            chan.lenCounter--;
         }
     }
     // Sequencer
     // Sweep works only if lengthCounter is non-zero
-    if (!m_chan[i].lenCounter)
+    if (!chan.lenCounter)
     {
-        m_chan[i].volume = 0;
-        m_chan[i].output = m_volTable[ m_chan[i].volume ];
+        chan.volume = 0;
+        chan.output = m_volTable[ chan.volume ];
         return;
     }
     // Sweep works
     uint8_t sweepReg = m_regs[APU_SWEEP1 + i*4];
     if ( (sweepReg & SWEEP_ENABLE_MASK) && (sweepReg & SWEEP_RATE_MASK) &&
-          m_chan[i].period >= (8 << (CONST_SHIFT_BITS + 4)) &&
-          m_chan[i].period <= (0x7FF << (CONST_SHIFT_BITS + 4)) )
+          chan.period >= (8 << (CONST_SHIFT_BITS + 4)) &&
+          chan.period <= (0x7FF << (CONST_SHIFT_BITS + 4)) )
     {
         if ( m_halfSignal )
         {
-            if ( m_chan[i].sweepCounter == (sweepReg & SWEEP_RATE_MASK) )
+            if ( chan.sweepCounter == (sweepReg & SWEEP_RATE_MASK) )
             {
-                m_chan[i].sweepCounter = 0;
-                auto delta = m_chan[i].period >> (sweepReg & SWEEP_SHIFT_MASK);
+                chan.sweepCounter = 0;
+                auto delta = chan.period >> (sweepReg & SWEEP_SHIFT_MASK);
                 if ( sweepReg & SWEEP_DIR_MASK )
                 {
                     delta = ~delta;
@@ -453,31 +454,31 @@ void NesApu::updateRectChannel(int i)
             }
             else
             {
-                m_chan[i].sweepCounter += 0x10;
+                chan.sweepCounter += 0x10;
             }
         }
     }
 
-    if ( m_chan[i].period < (8 << (CONST_SHIFT_BITS + 4)) ||
-         m_chan[i].period > (0x7FF << (CONST_SHIFT_BITS + 4)) )
+    if ( chan.period < (8 << (CONST_SHIFT_BITS + 4)) ||
+         chan.period > (0x7FF << (CONST_SHIFT_BITS + 4)) )
     {
-        m_chan[i].volume = 0;
-        m_chan[i].output = m_volTable[ m_chan[i].volume ];
+        chan.volume = 0;
+        chan.output = m_volTable[ chan.volume ];
         return;
     }
 
-    m_chan[i].counter += counterScaler << 3;
-    while ( m_chan[i].counter >= m_chan[i].period + (1 <<  (CONST_SHIFT_BITS + 4)) )
+    chan.counter += counterScaler << 3;
+    while ( chan.counter >= chan.period + (1 <<  (CONST_SHIFT_BITS + 4)) )
     {
-        m_chan[i].sequencer++;
-        m_chan[i].sequencer &= 0x07;
-        m_chan[i].counter -= (m_chan[i].period + (1 <<  (CONST_SHIFT_BITS + 4)));
+        chan.sequencer++;
+        chan.sequencer &= 0x07;
+        chan.counter -= (chan.period + (1 <<  (CONST_SHIFT_BITS + 4)));
     }
-    if ( !(sequencerTable[ (volumeReg &  DUTY_CYCLE_MASK) >> 6 ] & (1<<m_chan[i].sequencer)) )
+    if ( !(sequencerTable[ (volumeReg &  DUTY_CYCLE_MASK) >> 6 ] & (1<<chan.sequencer)) )
     {
-        m_chan[i].volume = 0;
+        chan.volume = 0;
     }
-    m_chan[i].output = m_volTable[ m_chan[i].volume ];
+    chan.output = m_volTable[ chan.volume ];
 }
 
 
@@ -560,71 +561,71 @@ void NesApu::updateTriangleChannel(ChannelInfo &chan)
 //    |Envelope |------->| >----------->| >------->|   DAC   |
 //    +---------+        |/             |/         +---------+
 
-void NesApu::updateNoiseChannel(int i)
+void NesApu::updateNoiseChannel(ChannelInfo &chan)
 {
-    if (!(m_regs[APU_STATUS] & (1<<i)))
+    if (!(m_regs[APU_STATUS] & (1<<3)))
     {
-        m_chan[i].volume = 0;
-        m_chan[i].output = m_volTable[ m_chan[i].volume ];
+        chan.volume = 0;
+        chan.output = m_volTable[ chan.volume ];
         return;
     }
 
-    uint8_t volumeReg = m_regs[APU_RECT_VOL1 + i*4];
+    uint8_t volumeReg = m_regs[APU_NOISE_VOL];
 
     // Decay counters are always enabled
     // So, run the envelope anyway
     if ( m_quaterSignal )
     {
-        if ( m_chan[i].updateEnvelope )
+        if ( chan.updateEnvelope )
         {
-            m_chan[i].decayCounter = 0x0F;
-            m_chan[i].divider = volumeReg & VALUE_VOL_MASK;
-            m_chan[i].updateEnvelope = false;
+            chan.decayCounter = 0x0F;
+            chan.divider = volumeReg & VALUE_VOL_MASK;
+            chan.updateEnvelope = false;
         }
-        else if (m_chan[i].divider)
+        else if (chan.divider)
         {
-            m_chan[i].divider--;
+            chan.divider--;
         }
         else
         {
-            m_chan[i].divider = volumeReg & VALUE_VOL_MASK;
-            if (m_chan[i].decayCounter)
+            chan.divider = volumeReg & VALUE_VOL_MASK;
+            if (chan.decayCounter)
             {
-                m_chan[i].decayCounter--;
+                chan.decayCounter--;
             }
             else if (volumeReg & ENABLE_LOOP_MASK)
             {
-                m_chan[i].decayCounter = 0x0F;
+                chan.decayCounter = 0x0F;
             }
         }
     }
     if ( volumeReg & FIXED_VOL_MASK ) // fixed volume
     {
-        m_chan[i].volume = volumeReg & VALUE_VOL_MASK;
+        chan.volume = volumeReg & VALUE_VOL_MASK;
     }
     else
     {
-        m_chan[i].volume = m_chan[i].decayCounter;
+        chan.volume = chan.decayCounter;
     }
 
     // Countdown len counter if enabled
     if ( !(volumeReg & DISABLE_LEN_MASK) )
     {
-        if (m_chan[i].lenCounter && m_fullSignal) // once per frame
+        if (chan.lenCounter && m_fullSignal) // once per frame
         {
-            m_chan[i].lenCounter--;
+            chan.lenCounter--;
         }
     }
 
-    if (!m_chan[i].lenCounter)
+    if (!chan.lenCounter)
     {
-        m_chan[i].volume = 0;
-        m_chan[i].output = m_volTable[ m_chan[i].volume ];
+        chan.volume = 0;
+        chan.output = m_volTable[ chan.volume ];
         return;
     }
 
-    m_chan[i].counter += counterScaler << 4;
-    while ( m_chan[i].counter >= m_chan[i].period + (1 <<  (CONST_SHIFT_BITS + 4)) )
+    chan.counter += counterScaler << 4;
+    while ( chan.counter >= chan.period + (1 <<  (CONST_SHIFT_BITS + 4)) )
     {
         uint8_t temp;
         if ( m_regs[APU_NOISE_FREQ] & NOISE_MODE_MASK )
@@ -639,13 +640,13 @@ void NesApu::updateNoiseChannel(int i)
         }
         m_shiftNoise >>= 1;
         m_shiftNoise |= (temp << 14);
-        m_chan[i].counter -= (m_chan[i].period + (1 <<  (CONST_SHIFT_BITS + 4)));
+        chan.counter -= (chan.period + (1 <<  (CONST_SHIFT_BITS + 4)));
     }
     if ( m_shiftNoise & 0x01 )
     {
-        m_chan[i].volume = 0;
+        chan.volume = 0;
     }
-    m_chan[i].output = m_volTable[ m_chan[i].volume ];
+    chan.output = m_volTable[ chan.volume ];
 }
 
 //------------------------------
@@ -711,7 +712,7 @@ void NesApu::updateDmcChannel(ChannelInfo &info)
 
 void NesApu::updateFrameCounter()
 {
-    uint8_t upperThreshold = (m_regs[APU_LOW_TIMER] & PAL_MODE_MASK) ? 5: 4;
+    const uint8_t upperThreshold = (m_regs[APU_LOW_TIMER] & PAL_MODE_MASK) ? 5: 4;
     m_quaterSignal = false;
     m_halfSignal = false;
     m_fullSignal = false;
@@ -735,13 +736,13 @@ void NesApu::updateFrameCounter()
 
 uint8_t NesApu::getData(uint16_t address)
 {
-    if ( address < 0x0800 )
+    if ( address < 0x2000 )
     {
         if ( m_ram == nullptr ) m_ram = static_cast<uint8_t *>(malloc(2048));
-        LOGM("[%04X] ==> %02X\n", address, m_ram[address]);
-        return m_ram[address];
+        LOGM("[%04X] ==> %02X\n", address, m_ram[address & 0x07FF]);
+        return m_ram[address & 0x07FF];
     }
-    else if ( address < 0x6000 )
+    else if ( address >= 0x2000 && address < 0x6000 )
     {
         return read( address );
     }
@@ -809,11 +810,11 @@ uint8_t NesApu::getDataInt(uint16_t address)
 
 bool NesApu::setData(uint16_t address, uint8_t data)
 {
-    if ( address < 0x0800 )
+    if ( address < 0x2000 )
     {
         if ( m_ram == nullptr ) m_ram = static_cast<uint8_t *>(malloc(2048));
-        m_ram[address] = data;
-        LOGM("[%04X] <== %02X\n", address, m_ram[address]);
+        m_ram[address & 0x07FF] = data;
+        LOGM("[%04X] <== %02X\n", data);
         return true;
     }
     else if ( address < 0x6000 )
@@ -900,11 +901,6 @@ void NesApu::IDY()
     m_cpu.absAddr += m_cpu.y;
 }
 
-uint8_t NesApu::fetch()
-{
-    return getData( m_cpu.pc++ );
-}
-
 enum
 {
     C_FLAG = 0x01,
@@ -926,11 +922,9 @@ void NesApu::modifyFlags(uint8_t baseData)
 
 void NesApu::printCpuState(const Instruction & instruction, uint16_t pc)
 {
-#ifdef DEBUG_NES_CPU
     LOGI("SP:%02X A:%02X X:%02X Y:%02X F:%02X [%04X] (0x%02X) %s\n",
          m_cpu.sp, m_cpu.a, m_cpu.x, m_cpu.y, m_cpu.flags, pc, getDataInt( pc ),
          getOpCode( instruction, getDataInt(pc + 1) | (static_cast<uint16_t>(getDataInt(pc + 2)) << 8)).c_str() );
-#endif
 }
 
 #define GEN_OPCODE(x) if ( instruction.opcode == &NesApu::x ) opcode = # x
@@ -1014,7 +1008,7 @@ std::string NesApu::getOpCode(const Instruction & instruction, uint16_t data)
 bool NesApu::executeInstruction()
 {
     using c = NesApu;
-    static constexpr NesApu::Instruction commands[256] =
+    static const NesApu::Instruction commands[256] =
     {
 /*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
 /* 0X */{ &c::UND, &c::UND }, { &c::ORA, &c::IDX }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ORA, &c::ZP  }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
@@ -1082,24 +1076,22 @@ bool NesApu::executeInstruction()
 /* FX */{ &c::UND, &c::UND }, { &c::SBC, &c::ABY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::SBC, &c::ABX }, { &c::INC, &c::ABX }, { &c::UND, &c::UND },
     };
 
+#ifdef DEBUG_NES_CPU
     uint16_t commandPc = m_cpu.pc;
+#endif
     uint8_t opcode = fetch();
-    bool result = true;
     if ( commands[ opcode ].opcode == &c::UND )
     {
         LOGE("Unknown instruction (0x%02X) detected at [0x%04X]\n", opcode, m_cpu.pc - 1);
-        result = false;
+        return false;
     }
-    else
-    {
-        m_cpu.implied = false;
-        (this->*commands[ opcode ].addrmode)();
-        printCpuState( commands[ opcode ], commandPc );
-        (this->*commands[ opcode ].opcode)();
-    }
-//    static int count = 0;
-//    count++; if (count > 2000000) return false;
-    return result;
+    m_cpu.implied = false;
+    (this->*commands[ opcode ].addrmode)();
+#ifdef DEBUG_NES_CPU
+    printCpuState( commands[ opcode ], commandPc );
+#endif
+    (this->*commands[ opcode ].opcode)();
+    return true;
 }
 
 int NesApu::callSubroutine(uint16_t addr)
