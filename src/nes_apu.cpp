@@ -18,6 +18,16 @@
 static constexpr uint32_t counterScaler = ((NES_CPU_FREQUENCY<<CONST_SHIFT_BITS) / SAMPLING_RATE);
 static constexpr uint32_t frameCounterPeriod = ((NES_CPU_FREQUENCY<<CONST_SHIFT_BITS) / 240 );
 
+/*
+static constexpr uint8_t lengthLut[] =
+{
+    5, 127, 10, 1, 20, 2, 40, 3,
+    80, 4, 30, 5, 7, 6, 13, 7,
+    6, 8, 12, 9, 24, 10, 48, 11,
+    96, 12, 36, 13, 8, 14, 16, 15,
+};
+*/
+
 static constexpr uint8_t lengthLut[] =
 {
     10, 254, 20, 2, 40, 4, 80, 6,
@@ -126,6 +136,12 @@ inline uint8_t getRegIndex(uint16_t reg)
     return reg - 0x4060;
 }
 
+inline uint16_t getRegAddress(uint8_t reg)
+{
+    if ( reg < 128 ) reg += 0x4000;
+    return reg;
+}
+
 NesApu::NesApu()
 {
     m_volume = 64;
@@ -157,10 +173,12 @@ void NesApu::reset()
 void NesApu::write(uint16_t reg, uint8_t val)
 {
     uint16_t originReg = reg;
-    LOGI( "Write 0x%02X to [%04X] reg\n", val, reg );
+    uint8_t oldVal = val;
+    LOGI( "Write 0x%02X to [%04X] reg\n", val, getRegAddress( reg ) );
     reg = getRegIndex(reg);
     if ( reg < APU_MAX_REG )
     {
+        oldVal = m_regs[reg];
         m_regs[reg] = val;
     }
     int chanIndex = (reg - APU_RECT_VOL1) / 4;
@@ -169,7 +187,7 @@ void NesApu::write(uint16_t reg, uint8_t val)
         case APU_RECT_VOL1:
         case APU_RECT_VOL2:
         case APU_NOISE_VOL:
-            m_chan[chanIndex].divider = val & VALUE_VOL_MASK;
+//            m_chan[chanIndex].divider = val & VALUE_VOL_MASK;
             break;
         case APU_TRIANGLE:
             break;
@@ -184,38 +202,47 @@ void NesApu::write(uint16_t reg, uint8_t val)
             if ( m_chan[chanIndex].counter > m_chan[chanIndex].period ) m_chan[chanIndex].counter = m_chan[chanIndex].period;
             break;
         case APU_NOISE_FREQ:
+        {
+            // reset noise generator when switching modes
+            if ( ( oldVal & NOISE_MODE_MASK ) != ( val & NOISE_MODE_MASK ) )
+            {
+                m_shiftNoise = 0x0001;
+            }
             m_chan[chanIndex].period = (noiseLut[val & NOISE_FREQ_MASK]) << (CONST_SHIFT_BITS + 4);
             if ( m_chan[chanIndex].counter > m_chan[chanIndex].period ) m_chan[chanIndex].counter = m_chan[chanIndex].period;
             break;
+        }
+
         case APU_RECT_LEN1:
         case APU_RECT_LEN2:
-        case APU_TRI_LEN:
-        case APU_NOISE_LEN:
-            // Do not reset triangle sequencer to prevent clicks. This is required per datasheet
-            if ( reg != APU_TRI_LEN && reg != APU_NOISE_LEN )
-            {
-                // We must reset duty cycle sequencer only for channels 1, 2 according to datasheet
-                m_chan[chanIndex].sequencer = 0;
-                // Reset counter also to prevent unexpected clicks
-                m_chan[chanIndex].counter = 0;
-            }
-            if ( reg != APU_TRI_LEN )
-            {
-                m_chan[chanIndex].updateEnvelope = true;
-            }
-            if ( reg != APU_NOISE_LEN )
-            {
-                // Unused on noise channel
-                m_chan[chanIndex].period = (m_chan[chanIndex].period & (0x00FF << (CONST_SHIFT_BITS + 4))) |
-                                           ((val & 0x07) << (8 + CONST_SHIFT_BITS + 4));
-            }
+            // We must reset duty cycle sequencer only for channels 1, 2 according to datasheet
+            m_chan[chanIndex].sequencer = 0;
+            // Reset counter also to prevent unexpected clicks
+            m_chan[chanIndex].counter = 0;
+            m_chan[chanIndex].updateEnvelope = true;
+            // Unused on noise channel
+            m_chan[chanIndex].period = (m_chan[chanIndex].period & (0x000000FF << (CONST_SHIFT_BITS + 4))) |
+                                       (static_cast<uint32_t>(val & 0x07) << (8 + CONST_SHIFT_BITS + 4));
             m_chan[chanIndex].lenCounter = lengthLut[val >> 3];
-            if ( reg == APU_TRI_LEN )
-            {
-                m_chan[chanIndex].linearReloadFlag = true;
-            }
             m_chan[chanIndex].counter = 0;
             break;
+
+        case APU_TRI_LEN:
+            // Do not reset triangle sequencer to prevent clicks. This is required per datasheet
+            // Unused on noise channel
+            m_chan[2].period = (m_chan[2].period & (0x000000FF << (CONST_SHIFT_BITS + 4))) |
+                                (static_cast<uint32_t>(val & 0x07) << (8 + CONST_SHIFT_BITS + 4));
+            m_chan[2].lenCounter = lengthLut[val >> 3];
+            m_chan[2].linearReloadFlag = true;
+            m_chan[2].counter = 0;
+            break;
+
+        case APU_NOISE_LEN:
+            m_chan[3].updateEnvelope = true;
+            m_chan[3].lenCounter = lengthLut[val >> 3];
+            m_chan[3].counter = 0;
+            break;
+
         case APU_DMC_DMA_FREQ:
             m_chan[4].period = dmcLut[ val & DMC_RATE_MASK ] << CONST_SHIFT_BITS;
             if (m_chan[4].counter >= m_chan[4].period) m_chan[4].counter = m_chan[4].period;
@@ -233,6 +260,7 @@ void NesApu::write(uint16_t reg, uint8_t val)
                 if (!(val & (1<<i)))
                 {
                     m_chan[i].counter = 0;
+                    m_chan[i].lenCounter = 0;
                 }
             }
             if ((m_regs[APU_STATUS] & 0x10) && !m_chan[4].dmcActive )
@@ -250,7 +278,6 @@ void NesApu::write(uint16_t reg, uint8_t val)
             break;
         case APU_LOW_TIMER:
             m_lastFrameCounter = 0;
-            m_apuFrames = 0;
             m_apuFrames = 0;
             break;
         default:
@@ -420,7 +447,7 @@ void NesApu::updateRectChannel(int i)
     // Countdown len counter if enabled
     if ( !(volumeReg & DISABLE_LEN_MASK) )
     {
-        if (chan.lenCounter && m_fullSignal) // once per frame
+        if (chan.lenCounter && m_halfSignal) // once per frame
         {
             chan.lenCounter--;
         }
@@ -509,26 +536,23 @@ void NesApu::updateTriangleChannel(ChannelInfo &chan)
         chan.output = m_volTable[ chan.volume ];
         return;
     }
-    else if (!disabled)
+    // Linear counter control
+    uint8_t triangleReg = m_regs[APU_TRIANGLE];
+    if ( m_quaterSignal )
     {
-        // Linear counter control
-        uint8_t triangleReg = m_regs[APU_TRIANGLE];
-        if ( m_quaterSignal )
+        if ( chan.linearReloadFlag )
+            chan.linearCounter = triangleReg & 0x7F;
+        else if ( chan.linearCounter)
+            chan.linearCounter--;
+        if (!(triangleReg & 0x80))
         {
-            if ( chan.linearReloadFlag )
-                chan.linearCounter = triangleReg & 0x7F;
-            else if ( chan.linearCounter)
-                chan.linearCounter--;
-            if (!(triangleReg & 0x80))
-            {
-                chan.linearReloadFlag = false;
-            }
+            chan.linearReloadFlag = false;
         }
-        // Length counter control
-        if (m_fullSignal && !(triangleReg & 0x80) && chan.lenCounter) // once per frame
-        {
-            chan.lenCounter--;
-        }
+    }
+    // Length counter control
+    if (m_halfSignal && !(triangleReg & 0x80) && chan.lenCounter) // once per frame
+    {
+        chan.lenCounter--;
     }
 
     if ((!chan.lenCounter || !chan.linearCounter))
@@ -611,7 +635,7 @@ void NesApu::updateNoiseChannel(ChannelInfo &chan)
     // Countdown len counter if enabled
     if ( !(volumeReg & DISABLE_LEN_MASK) )
     {
-        if (chan.lenCounter && m_fullSignal) // once per frame
+        if (chan.lenCounter && m_halfSignal) // once per frame
         {
             chan.lenCounter--;
         }
@@ -624,7 +648,7 @@ void NesApu::updateNoiseChannel(ChannelInfo &chan)
         return;
     }
 
-    chan.counter += counterScaler << 4;
+    chan.counter += counterScaler << 3;
     while ( chan.counter >= chan.period + (1 <<  (CONST_SHIFT_BITS + 4)) )
     {
         uint8_t temp;
@@ -724,9 +748,9 @@ void NesApu::updateFrameCounter()
         if ( m_apuFrames != 4 || upperThreshold != 5 )
         {
             m_quaterSignal = true;
-            m_halfSignal = (m_apuFrames == 2) || (m_apuFrames == upperThreshold);
         }
-        if ( m_apuFrames == upperThreshold )
+        m_halfSignal = (m_apuFrames == 2) || (m_apuFrames >= upperThreshold);
+        if ( m_apuFrames >= upperThreshold )
         {
             m_fullSignal = true;
             m_apuFrames = 0;
@@ -814,7 +838,7 @@ bool NesApu::setData(uint16_t address, uint8_t data)
     {
         if ( m_ram == nullptr ) m_ram = static_cast<uint8_t *>(malloc(2048));
         m_ram[address & 0x07FF] = data;
-        LOGM("[%04X] <== %02X\n", data);
+        LOGM("[%04X] <== %02X\n", address, data);
         return true;
     }
     else if ( address < 0x6000 )
@@ -1094,21 +1118,33 @@ bool NesApu::executeInstruction()
     return true;
 }
 
-int NesApu::callSubroutine(uint16_t addr)
+int NesApu::callSubroutine(uint16_t addr, int maxInstructions)
 {
-    uint8_t sp = m_cpu.sp;
+    m_stopSp = m_cpu.sp;
     m_cpu.absAddr = addr;
     JSR();
-    while ( sp != m_cpu.sp && executeInstruction( ) )
+    return continueSubroutine( maxInstructions );
+}
+
+int NesApu::continueSubroutine(int maxInstructions)
+{
+    while ( m_stopSp != m_cpu.sp && executeInstruction( ) && maxInstructions )
     {
+        if ( maxInstructions > 0 ) maxInstructions--;
     }
-    if ( sp == m_cpu.sp )
+    // Exit if we returned from subroutine call
+    if ( m_stopSp == m_cpu.sp )
     {
         return 1;
     }
+    // If instruction limit is reached, inform that there are more commands to execute
+    if ( maxInstructions == 0 )
+    {
+        return 0;
+    }
     // Error occured, set pc to problem instruction
     m_cpu.pc--;
-    return 0;
+    return -1;
 }
 
 void NesApu::BPL()

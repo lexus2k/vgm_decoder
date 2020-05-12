@@ -77,8 +77,24 @@ public:
     void setDataBlock( const uint8_t *data, uint32_t len );
     void setDataBlock( uint32_t addr, const uint8_t *data, uint32_t len );
 
+    /** executes single instruction. returns false if cpu hardware error is detected */
     bool executeInstruction();
-    int callSubroutine(uint16_t addr);
+
+    /**
+     * Calls subroutine limiting the maximum number of instructions.
+     * Returns negative number if cpu error detected
+     * Returns positive number if subroutine call is completed
+     * Returns zero if limit of instructions is reached, but subroutine is not completed (use continueSubroutine).
+     */
+    int callSubroutine(uint16_t addr, int maxInstructions = -1);
+
+    /**
+     * Continues subroutine from the last place limiting the maximum number of instructions.
+     * Returns negative number if cpu error detected
+     * Returns positive number if subroutine call is completed
+     * Returns zero if limit of instructions is reached, but subroutine is not completed (use continueSubroutine).
+     */
+    int continueSubroutine( int maxInstructions = -1 );
 
     uint8_t getData(uint16_t address);
     bool setData(uint16_t address, uint8_t data);
@@ -108,6 +124,7 @@ private:
     ChannelInfo m_chan[5]{};
 
     NesCpuState m_cpu{};
+    uint8_t m_stopSp;
     uint8_t *m_ram = nullptr;
     uint8_t m_bank[8];
 

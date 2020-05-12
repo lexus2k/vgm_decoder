@@ -399,7 +399,7 @@ bool VgmFile::setTrack(int track)
     cpu.x = 0; // ntsc
     cpu.a = track < m_nsfHeader->songIndex ? track: 0;
     cpu.sp = 0xEF;
-    if ( !m_nesChip->callSubroutine( m_nsfHeader->initAddress ) )
+    if ( m_nesChip->callSubroutine( m_nsfHeader->initAddress ) < 0 )
     {
         LOGE( "Failed to call init subroutine for NSF file\n" );
         return false;
@@ -495,9 +495,15 @@ int VgmFile::decodeNfsPcm(uint8_t *outBuffer, int maxSize)
                 LOGI("m_samplesPlayed: %d\n", m_samplesPlayed);
                 break; // TODO: 3 minutes limit
             }
-            if ( !m_nesChip->callSubroutine( m_nsfHeader->playAddress ) )
+            int result = m_nesChip->callSubroutine( m_nsfHeader->playAddress, 20000 );
+            if ( result < 0 )
             {
-                LOGE( "Failed to call play subroutine, stopping\n" );
+                LOGE( "Failed to call play subroutine due to CPU error, stopping\n" );
+                break;
+            }
+            if ( result == 0 )
+            {
+                LOGE( "Failed to call play subroutine, it looks infinite loop, stopping\n" );
                 break;
             }
             m_waitSamples = (m_writeScaler * static_cast<uint32_t>( m_nsfHeader->ntscPlaySpeed )) / 1000000;
