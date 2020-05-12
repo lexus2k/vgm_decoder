@@ -129,10 +129,10 @@ private:
 
     struct Instruction
     {
+        Instruction(void (NesApu::* &&a)(void), void (NesApu::* &&b)(void)): opcode(a), addrmode(b) {}
         void (NesApu::*opcode)  (void) = nullptr;
         void (NesApu::*addrmode)(void) = nullptr;
     };
-
 
     uint8_t m_regs[APU_MAX_REG]{};
     NesMemoryBlock m_mem[APU_MAX_MEMORY_BLOCKS]{};
