@@ -38,6 +38,7 @@ VgmFile::VgmFile()
     : m_readScaler( VGM_SAMPLE_RATE )
     , m_writeScaler( VGM_SAMPLE_RATE )
 {
+    setMaxDuration( 3 * 60 * 1000 );
 }
 
 VgmFile::~VgmFile()
@@ -432,6 +433,11 @@ bool VgmFile::setTrack(int track)
     return true;
 }
 
+void VgmFile::setMaxDuration( uint32_t milliseconds )
+{
+    m_duration = static_cast<uint64_t>(milliseconds) * VGM_SAMPLE_RATE / 1000;
+}
+
 typedef struct
 {
     uint16_t left, right;
@@ -475,6 +481,11 @@ int VgmFile::decodeVgmPcm(uint8_t *outBuffer, int maxSize)
     {
         while ( !m_waitSamples )
         {
+            if ( m_duration && m_samplesPlayed >= m_duration )
+            {
+                LOGI("m_samplesPlayed: %d\n", m_samplesPlayed);
+                return decoded;
+            }
             if (!nextCommand())
             {
                 return decoded;
@@ -491,6 +502,7 @@ int VgmFile::decodeVgmPcm(uint8_t *outBuffer, int maxSize)
             interpolateSample();
 
             m_writeCounter += m_writeScaler;
+            m_samplesPlayed++;
             m_waitSamples--;
 
             if ( m_writeCounter >= VGM_SAMPLE_RATE )
@@ -500,7 +512,6 @@ int VgmFile::decodeVgmPcm(uint8_t *outBuffer, int maxSize)
                 decoded += 4;
                 m_writeCounter -= VGM_SAMPLE_RATE;
                 m_sampleSumValid = false;
-                m_samplesPlayed++;
             }
         }
     }
@@ -514,10 +525,10 @@ int VgmFile::decodeNfsPcm(uint8_t *outBuffer, int maxSize)
     {
         if ( !m_waitSamples )
         {
-            if ( m_samplesPlayed > 3 * 60 * static_cast<uint32_t>(m_writeScaler) )
+            if ( m_duration && m_samplesPlayed >= m_duration )
             {
                 LOGI("m_samplesPlayed: %d\n", m_samplesPlayed);
-                break; // TODO: 3 minutes limit
+                break;
             }
             int result = m_nesChip->callSubroutine( m_nsfHeader->playAddress, 20000 );
             if ( result < 0 )
@@ -530,16 +541,18 @@ int VgmFile::decodeNfsPcm(uint8_t *outBuffer, int maxSize)
                 LOGE( "Failed to call play subroutine, it looks infinite loop, stopping\n" );
                 break;
             }
-            m_waitSamples = (m_writeScaler * static_cast<uint32_t>( m_nsfHeader->ntscPlaySpeed )) / 1000000;
+            m_waitSamples = (VGM_SAMPLE_RATE * static_cast<uint32_t>( m_nsfHeader->ntscPlaySpeed )) / 1000000;
             LOGI( "Next block %d samples [%d.%03d - %d.%03d]\n", m_waitSamples,
-                   m_samplesPlayed / m_writeScaler, 1000 * (m_samplesPlayed % m_writeScaler) / m_writeScaler,
-                   (m_samplesPlayed + m_waitSamples) / m_writeScaler, 1000 * ((m_samplesPlayed + m_waitSamples) % m_writeScaler) / m_writeScaler );
+                   m_samplesPlayed / VGM_SAMPLE_RATE, 1000 * (m_samplesPlayed % VGM_SAMPLE_RATE) / VGM_SAMPLE_RATE,
+                   (m_samplesPlayed + m_waitSamples) / VGM_SAMPLE_RATE,
+                   1000 * ((m_samplesPlayed + m_waitSamples) % VGM_SAMPLE_RATE) / VGM_SAMPLE_RATE );
         }
         while ( m_waitSamples && (decoded + 4 <= maxSize) )
         {
             interpolateSample();
 
             m_writeCounter += m_writeScaler;
+            m_samplesPlayed++;
             m_waitSamples--;
 
             if ( m_writeCounter >= VGM_SAMPLE_RATE )
@@ -549,7 +562,6 @@ int VgmFile::decodeNfsPcm(uint8_t *outBuffer, int maxSize)
                 decoded += 4;
                 m_writeCounter -= VGM_SAMPLE_RATE;
                 m_sampleSumValid = false;
-                m_samplesPlayed++;
             }
         }
     }

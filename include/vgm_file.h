@@ -156,6 +156,12 @@ public:
     /** Sets track to play */
     bool setTrack(int track);
 
+    /**
+     * Sets maximum decoding duration in milliseconds.
+     * Useful for looped music
+     */
+    void setMaxDuration( uint32_t milliseconds );
+
     AY38910 *getMsxChip() { return m_msxChip; }
     NesApu *getNesChip() { return m_nesChip; }
 
@@ -167,6 +173,9 @@ private:
 
     const VgmHeader *m_header = nullptr;
     const NsfHeader *m_nsfHeader = nullptr;
+
+    /** Duration in samples */
+    uint32_t m_duration = 0;
 
     uint32_t m_rate;
     uint32_t m_vgmDataOffset;
