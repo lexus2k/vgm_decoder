@@ -992,72 +992,9 @@ static std::string hexToString( uint8_t hex )
     return str;
 }
 
-std::string NesApu::getOpCode(const Instruction & instruction, uint16_t data)
+using c = NesApu;
+const NesApu::Instruction NesApu::commands[256] =
 {
-    std::string opcode = "???";
-    GEN_OPCODE(ADC);
-    GEN_OPCODE(SBC);
-    GEN_OPCODE(CLC);
-    GEN_OPCODE(BPL);
-    GEN_OPCODE(BEQ);
-    GEN_OPCODE(BNE);
-    GEN_OPCODE(BMI);
-    GEN_OPCODE(BCC);
-    GEN_OPCODE(BCS);
-    GEN_OPCODE(CMP);
-    GEN_OPCODE(CPX);
-    GEN_OPCODE(CPY);
-    GEN_OPCODE(JSR);
-    GEN_OPCODE(ASL);
-    GEN_OPCODE(INY);
-    GEN_OPCODE(LDA);
-    GEN_OPCODE(LDX);
-    GEN_OPCODE(LDY);
-    GEN_OPCODE(STA);
-    GEN_OPCODE(STX);
-    GEN_OPCODE(STY);
-    GEN_OPCODE(TAX);
-    GEN_OPCODE(TAY);
-    GEN_OPCODE(TXA);
-    GEN_OPCODE(TYA);
-    GEN_OPCODE(JMP);
-    GEN_OPCODE(RTS);
-    GEN_OPCODE(DEC);
-    GEN_OPCODE(INC);
-    GEN_OPCODE(DEX);
-    GEN_OPCODE(DEY);
-    GEN_OPCODE(INX);
-    GEN_OPCODE(AND);
-    GEN_OPCODE(ORA);
-    GEN_OPCODE(EOR);
-    GEN_OPCODE(NOP);
-    GEN_OPCODE(LSR);
-    GEN_OPCODE(ROR);
-    GEN_OPCODE(ROL);
-    GEN_OPCODE(PHA);
-    GEN_OPCODE(PLA);
-    GEN_OPCODE(SEC);
-
-    GEN_ADDRMODE(UND, "");
-    GEN_ADDRMODE(IMD, " #" + hexToString( static_cast<uint8_t>( data ) ) );
-    GEN_ADDRMODE(ZP,  " $" + hexToString( static_cast<uint8_t>( data ) ) );
-    GEN_ADDRMODE(ZPX, " $" + hexToString( static_cast<uint8_t>( data ) ) + std::string(", X"));
-    GEN_ADDRMODE(ZPY, " $" + hexToString( static_cast<uint8_t>( data ) ) + std::string(", Y"));
-    GEN_ADDRMODE(ABS, " $" + hexToString( data ));
-    GEN_ADDRMODE(ABX, " $" + hexToString( static_cast<uint16_t>( data ) ) + std::string(", X"));
-    GEN_ADDRMODE(ABY, " $" + hexToString( static_cast<uint16_t>( data ) ) + std::string(", Y"));
-    GEN_ADDRMODE(REL, " $" + hexToString( static_cast<uint8_t>( data ) ));
-    GEN_ADDRMODE(IND, " ($" + hexToString( data ) + std::string(")"));
-    GEN_ADDRMODE(IDX, " ($" + hexToString( static_cast<uint8_t>(data) ) + std::string(", X)"));
-    GEN_ADDRMODE(IDY, " ($" + hexToString( static_cast<uint8_t>(data) ) + std::string("), Y"));
-    return opcode;
-}
-
-bool NesApu::executeInstruction()
-{
-    using c = NesApu;
-    static const NesApu::Instruction commands[256] =
-    {
 /*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
 /* 0X */{ &c::UND, &c::UND }, { &c::ORA, &c::IDX }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ORA, &c::ZP  }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
 /*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
@@ -1122,8 +1059,71 @@ bool NesApu::executeInstruction()
 /* FX */{ &c::BEQ, &c::REL }, { &c::SBC, &c::IDY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::SBC, &c::ZPX }, { &c::INC, &c::ZPX }, { &c::UND, &c::UND },
 /*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
 /* FX */{ &c::UND, &c::UND }, { &c::SBC, &c::ABY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::SBC, &c::ABX }, { &c::INC, &c::ABX }, { &c::UND, &c::UND },
-    };
+};
 
+std::string NesApu::getOpCode(const Instruction & instruction, uint16_t data)
+{
+    std::string opcode = "???";
+    GEN_OPCODE(ADC);
+    GEN_OPCODE(SBC);
+    GEN_OPCODE(CLC);
+    GEN_OPCODE(BPL);
+    GEN_OPCODE(BEQ);
+    GEN_OPCODE(BNE);
+    GEN_OPCODE(BMI);
+    GEN_OPCODE(BCC);
+    GEN_OPCODE(BCS);
+    GEN_OPCODE(CMP);
+    GEN_OPCODE(CPX);
+    GEN_OPCODE(CPY);
+    GEN_OPCODE(JSR);
+    GEN_OPCODE(ASL);
+    GEN_OPCODE(INY);
+    GEN_OPCODE(LDA);
+    GEN_OPCODE(LDX);
+    GEN_OPCODE(LDY);
+    GEN_OPCODE(STA);
+    GEN_OPCODE(STX);
+    GEN_OPCODE(STY);
+    GEN_OPCODE(TAX);
+    GEN_OPCODE(TAY);
+    GEN_OPCODE(TXA);
+    GEN_OPCODE(TYA);
+    GEN_OPCODE(JMP);
+    GEN_OPCODE(RTS);
+    GEN_OPCODE(DEC);
+    GEN_OPCODE(INC);
+    GEN_OPCODE(DEX);
+    GEN_OPCODE(DEY);
+    GEN_OPCODE(INX);
+    GEN_OPCODE(AND);
+    GEN_OPCODE(ORA);
+    GEN_OPCODE(EOR);
+    GEN_OPCODE(NOP);
+    GEN_OPCODE(LSR);
+    GEN_OPCODE(ROR);
+    GEN_OPCODE(ROL);
+    GEN_OPCODE(PHA);
+    GEN_OPCODE(PLA);
+    GEN_OPCODE(SEC);
+
+    GEN_ADDRMODE(UND, "");
+    GEN_ADDRMODE(IMD, " #" + hexToString( static_cast<uint8_t>( data ) ) );
+    GEN_ADDRMODE(ZP,  " $" + hexToString( static_cast<uint8_t>( data ) ) );
+    GEN_ADDRMODE(ZPX, " $" + hexToString( static_cast<uint8_t>( data ) ) + std::string(", X"));
+    GEN_ADDRMODE(ZPY, " $" + hexToString( static_cast<uint8_t>( data ) ) + std::string(", Y"));
+    GEN_ADDRMODE(ABS, " $" + hexToString( data ));
+    GEN_ADDRMODE(ABX, " $" + hexToString( static_cast<uint16_t>( data ) ) + std::string(", X"));
+    GEN_ADDRMODE(ABY, " $" + hexToString( static_cast<uint16_t>( data ) ) + std::string(", Y"));
+    GEN_ADDRMODE(REL, " $" + hexToString( static_cast<uint8_t>( data ) ));
+    GEN_ADDRMODE(IND, " ($" + hexToString( data ) + std::string(")"));
+    GEN_ADDRMODE(IDX, " ($" + hexToString( static_cast<uint8_t>(data) ) + std::string(", X)"));
+    GEN_ADDRMODE(IDY, " ($" + hexToString( static_cast<uint8_t>(data) ) + std::string("), Y"));
+    return opcode;
+}
+
+bool NesApu::executeInstruction()
+{
 #ifdef DEBUG_NES_CPU
     uint16_t commandPc = m_cpu.pc;
 #endif

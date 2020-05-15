@@ -126,7 +126,6 @@ public:
     NesCpuState &cpuState();
 
 private:
-
     struct Instruction
     {
         Instruction(void (NesApu::* &&a)(void), void (NesApu::* &&b)(void)): opcode(a), addrmode(b) {}
@@ -152,6 +151,8 @@ private:
     uint8_t *m_ram = nullptr;
     uint8_t m_bank[8];
 
+    static const NesApu::Instruction commands[256];
+
     // APU Processing
     void updateRectChannel(int i);
     void updateTriangleChannel(ChannelInfo &info);
@@ -159,8 +160,14 @@ private:
     void updateDmcChannel(ChannelInfo &info);
     void updateFrameCounter();
 
-    // RAM/ROM Access
     uint8_t getDataInt(uint16_t address);
+
+    std::string getOpCode(const Instruction & instruction, uint16_t data);
+    void modifyFlags(uint8_t data);
+    uint8_t fetch() { return getData( m_cpu.pc++ ); }
+    void printCpuState( const Instruction & instruction, uint16_t pc );
+
+    // RAM/ROM Access
     void IMD();
     void ZP();
     void ZPX();
@@ -172,10 +179,10 @@ private:
     void IND();
     void IDX();
     void IDY();
-
-    // opcodes
-    std::string getOpCode(const Instruction & instruction, uint16_t data);
     void UND() { m_cpu.implied = true; };
+
+    // CPU Core
+    // opcodes
     void BPL();
     void ADC();
     void SBC();
@@ -218,9 +225,4 @@ private:
     void PHA();
     void PLA();
     void SEC();
-
-    // CPU Core
-    void modifyFlags(uint8_t data);
-    uint8_t fetch() { return getData( m_cpu.pc++ ); }
-    void printCpuState( const Instruction & instruction, uint16_t pc );
 };
