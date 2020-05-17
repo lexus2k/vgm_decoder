@@ -120,8 +120,8 @@ public:
      */
     int continueSubroutine( int maxInstructions = -1 );
 
-    uint8_t getData(uint16_t address);
-    bool setData(uint16_t address, uint8_t data);
+    uint8_t readMem(uint16_t address);
+    bool writeMem(uint16_t address, uint8_t data);
 
     NesCpuState &cpuState();
 
@@ -160,13 +160,6 @@ private:
     void updateDmcChannel(ChannelInfo &info);
     void updateFrameCounter();
 
-    uint8_t getDataInt(uint16_t address);
-
-    std::string getOpCode(const Instruction & instruction, uint16_t data);
-    void modifyFlags(uint8_t data);
-    uint8_t fetch() { return getData( m_cpu.pc++ ); }
-    void printCpuState( const Instruction & instruction, uint16_t pc );
-
     // RAM/ROM Access
     void IMD();
     void ZP();
@@ -180,6 +173,11 @@ private:
     void IDX();
     void IDY();
     void UND() { m_cpu.implied = true; };
+    uint8_t fetch() { return readMem( m_cpu.pc++ ); }
+    uint8_t readMemInternal(uint16_t address);
+    uint16_t m_mapper031BaseAddress = 0xFFFF;
+    uint32_t mapper031(uint16_t address);
+
 
     // CPU Core
     // opcodes
@@ -225,4 +223,10 @@ private:
     void PHA();
     void PLA();
     void SEC();
+    void BRK();
+
+    std::string getOpCode(const Instruction & instruction, uint16_t data);
+    void modifyFlags(uint8_t data);
+    void printCpuState( const Instruction & instruction, uint16_t pc );
+
 };

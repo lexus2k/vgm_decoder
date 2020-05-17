@@ -185,6 +185,7 @@ void NesApu::reset()
 {
     m_shiftNoise = 0x0001;
     m_lastFrameCounter = 0;
+    m_mapper031BaseAddress = 0xFFFF;
     for (int i=0; i<APU_MAX_MEMORY_BLOCKS; i++)
     {
         m_mem[i].data = nullptr;
@@ -309,7 +310,7 @@ void NesApu::write(uint16_t reg, uint8_t val)
             if ( originReg >= 0x5000 && originReg <= 0x5FFF )
             {
                 m_bank[originReg & 0x07] = val;
-                LOGM( "BANK %d [%04X] = %02X (%d) 0x%08X\n", originReg & 0x07, originReg,
+                LOGI( "BANK %d [%04X] = %02X (%d) 0x%08X\n", originReg & 0x07, originReg,
                       val, 0x8000 + val * 4096, 0x8000 + val * 4096 );
             }
             // Check for sweep support on channels TRI and NOISE
@@ -368,6 +369,8 @@ void NesApu::setDataBlock( uint32_t addr, const uint8_t *data, uint32_t len )
         LOGE("Out of memory blocks\n");
         return;
     }
+    if ( addr < m_mapper031BaseAddress )
+        m_mapper031BaseAddress = addr & 0xF000;
     m_mem[ blockNumber ].data = data;
     m_mem[ blockNumber ].size = len;
     m_mem[ blockNumber ].addr = addr;
@@ -729,7 +732,7 @@ void NesApu::updateDmcChannel(ChannelInfo &info)
                 return;
             }
         }
-        info.dmcBuffer = getData( info.dmcAddr );
+        info.dmcBuffer = readMem( info.dmcAddr );
         info.sequencer = 8;
         info.dmcAddr++;
         info.dmcLen--;
@@ -782,8 +785,23 @@ void NesApu::updateFrameCounter()
     }
 }
 
-uint8_t NesApu::getData(uint16_t address)
+uint32_t NesApu::mapper031(uint16_t address)
 {
+    if ( address < 0x8000 )
+    {
+        return address;
+    }
+    if ( address >= 0xFFFA )
+    {
+        return address;
+    }
+    return m_mapper031BaseAddress + ((static_cast<uint32_t>(m_bank[(address >> 12) & 0x07]) << 12) |
+                        (address & 0x0FFF));
+}
+
+uint8_t NesApu::readMem(uint16_t address)
+{
+    uint32_t mappedAddr = mapper031( address );
     if ( address < 0x2000 )
     {
         if ( m_ram == nullptr ) m_ram = static_cast<uint8_t *>(malloc(2048));
@@ -797,16 +815,14 @@ uint8_t NesApu::getData(uint16_t address)
     // Cartridge
     else if ( address >= 0x6000 && address < 0x8000 )
     {
-        LOGE("Memory data fetch error 0x%04X\n", address);
+        LOGE("Memory data fetch error (Battery backed RAM) 0x%04X\n", address);
         return 0;
     }
-    uint32_t mappedAddr = 0x00008000 + ((static_cast<uint32_t>(m_bank[(address >> 12) & 0x07]) << 12) |
-                                        (address & 0x0FFF));
     for (int i=0; i<APU_MAX_MEMORY_BLOCKS; i++)
     {
         if ( m_mem[i].data == nullptr )
         {
-            LOGE("Memory data fetch error 0x%04X\n", address);
+            LOGE("Memory data fetch error 0x%04X (mapped to 0x%08X)\n", address, mappedAddr);
             return 0;
         }
         if ( mappedAddr >= m_mem[i].addr &&
@@ -817,11 +833,12 @@ uint8_t NesApu::getData(uint16_t address)
             return  m_mem[i].data[ addr ];
         }
     }
-    return 0;
+    return 0xFF;
 }
 
-uint8_t NesApu::getDataInt(uint16_t address)
+uint8_t NesApu::readMemInternal(uint16_t address)
 {
+    uint32_t mappedAddr = mapper031( address );
     if ( address < 0x0800 )
     {
         if ( m_ram == nullptr ) m_ram = static_cast<uint8_t *>(malloc(2048));
@@ -837,13 +854,11 @@ uint8_t NesApu::getDataInt(uint16_t address)
         LOGE("Memory data fetch error 0x%04X\n", address);
         return 0;
     }
-    uint32_t mappedAddr = 0x00008000 + ((static_cast<uint32_t>(m_bank[(address >> 12) & 0x07]) << 12) |
-                                        (address & 0x0FFF));
     for (int i=0; i<APU_MAX_MEMORY_BLOCKS; i++)
     {
         if ( m_mem[i].data == nullptr )
         {
-            LOGE("Memory data fetch error 0x%04X\n", address);
+            LOGE("Memory data fetch error 0x%04X (mapped to 0x%08X)\n", address, mappedAddr);
             return 0;
         }
         if ( mappedAddr >= m_mem[i].addr &&
@@ -853,10 +868,10 @@ uint8_t NesApu::getDataInt(uint16_t address)
             return  m_mem[i].data[ addr ];
         }
     }
-    return 0;
+    return 0xFF;
 }
 
-bool NesApu::setData(uint16_t address, uint8_t data)
+bool NesApu::writeMem(uint16_t address, uint8_t data)
 {
     if ( address < 0x2000 )
     {
@@ -870,7 +885,12 @@ bool NesApu::setData(uint16_t address, uint8_t data)
         write( address, data );
         return true;
     }
-    LOGE("Memory data write error (ROM) x%04X\n", address);
+    else if ( address < 0x8000 )
+    {
+        LOGE( "Memory data write error (Battery backed RAM) 0x%04X\n", address );
+        return false;
+    }
+    LOGE("Memory data write error (ROM) 0x%04X\n", address);
     return false;
 }
 
@@ -932,20 +952,20 @@ void NesApu::IND()
     m_cpu.absAddr = fetch();
     m_cpu.absAddr |= (static_cast<uint16_t>(fetch()) << 8);
     // no page boundary hardware bug
-    m_cpu.absAddr = (getData(m_cpu.absAddr)) | (getData( m_cpu.absAddr + 1 ) << 8);
+    m_cpu.absAddr = (readMem(m_cpu.absAddr)) | (readMem( m_cpu.absAddr + 1 ) << 8);
 }
 
 void NesApu::IDX()
 {
     m_cpu.absAddr = (fetch() + m_cpu.x) & 0x00FF;
-    m_cpu.absAddr = (getData(m_cpu.absAddr)) | (getData( (m_cpu.absAddr + 1) & 0xFF ) << 8);
+    m_cpu.absAddr = (readMem(m_cpu.absAddr)) | (readMem( (m_cpu.absAddr + 1) & 0xFF ) << 8);
 }
 
 void NesApu::IDY()
 {
     m_cpu.absAddr = fetch();
-    m_cpu.absAddr = static_cast<uint16_t>(getData( m_cpu.absAddr )) |
-                    (static_cast<uint16_t>(getData( (m_cpu.absAddr + 1) & 0xFF )) << 8);
+    m_cpu.absAddr = static_cast<uint16_t>(readMem( m_cpu.absAddr )) |
+                    (static_cast<uint16_t>(readMem( (m_cpu.absAddr + 1) & 0xFF )) << 8);
     m_cpu.absAddr += m_cpu.y;
 }
 
@@ -971,8 +991,8 @@ void NesApu::modifyFlags(uint8_t baseData)
 void NesApu::printCpuState(const Instruction & instruction, uint16_t pc)
 {
     LOGI("SP:%02X A:%02X X:%02X Y:%02X F:%02X [%04X] (0x%02X) %s\n",
-         m_cpu.sp, m_cpu.a, m_cpu.x, m_cpu.y, m_cpu.flags, pc, getDataInt( pc ),
-         getOpCode( instruction, getDataInt(pc + 1) | (static_cast<uint16_t>(getDataInt(pc + 2)) << 8)).c_str() );
+         m_cpu.sp, m_cpu.a, m_cpu.x, m_cpu.y, m_cpu.flags, pc, readMemInternal( pc ),
+         getOpCode( instruction, readMemInternal(pc + 1) | (static_cast<uint16_t>(readMemInternal(pc + 2)) << 8)).c_str() );
 }
 
 #define GEN_OPCODE(x) if ( instruction.opcode == &NesApu::x ) opcode = # x
@@ -996,13 +1016,13 @@ using c = NesApu;
 const NesApu::Instruction NesApu::commands[256] =
 {
 /*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
-/* 0X */{ &c::UND, &c::UND }, { &c::ORA, &c::IDX }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ORA, &c::ZP  }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/* 0X */{ &c::BRK, &c::UND }, { &c::ORA, &c::IDX }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ORA, &c::ZP  }, { &c::ASL, &c::ZP  }, { &c::UND, &c::UND },
 /*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
-/* 0X */{ &c::UND, &c::UND }, { &c::ORA, &c::IMD }, { &c::ASL, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ORA, &c::ABS }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/* 0X */{ &c::UND, &c::UND }, { &c::ORA, &c::IMD }, { &c::ASL, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ORA, &c::ABS }, { &c::ASL, &c::ABS }, { &c::UND, &c::UND },
 /*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
-/* 1X */{ &c::BPL, &c::REL }, { &c::ORA, &c::IDY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ORA, &c::ZPX }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/* 1X */{ &c::BPL, &c::REL }, { &c::ORA, &c::IDY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ORA, &c::ZPX }, { &c::ASL, &c::ZPX }, { &c::UND, &c::UND },
 /*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
-/* 1X */{ &c::CLC, &c::UND }, { &c::ORA, &c::ABY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ORA, &c::ABX }, { &c::UND, &c::UND }, { &c::UND, &c::UND },
+/* 1X */{ &c::CLC, &c::UND }, { &c::ORA, &c::ABY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ORA, &c::ABX }, { &c::ASL, &c::ABX }, { &c::UND, &c::UND },
 /*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
 /* 2X */{ &c::JSR, &c::ABS }, { &c::AND, &c::IDX }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::AND, &c::ZP  }, { &c::ROL, &c::ZP  }, { &c::UND, &c::UND },
 /*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
@@ -1178,7 +1198,7 @@ void NesApu::BPL()
 
 void NesApu::ADC()
 {
-    uint8_t data = getData( m_cpu.absAddr );
+    uint8_t data = readMem( m_cpu.absAddr );
     uint16_t temp = (uint16_t)m_cpu.a + (uint16_t)data + (uint16_t)(( m_cpu.flags & C_FLAG ) ? 1: 0);
     if ( temp > 255 ) m_cpu.flags |= C_FLAG; else m_cpu.flags &= ~C_FLAG;
     modifyFlags( temp );
@@ -1191,7 +1211,7 @@ void NesApu::ADC()
 
 void NesApu::SBC()
 {
-    uint16_t data = static_cast<uint16_t>(getData( m_cpu.absAddr )) ^ 0x00FF;
+    uint16_t data = static_cast<uint16_t>(readMem( m_cpu.absAddr )) ^ 0x00FF;
     uint16_t temp = (uint16_t)m_cpu.a + (uint16_t)data + (uint16_t)(( m_cpu.flags & C_FLAG ) ? 1: 0);
     if ( temp > 255 ) m_cpu.flags |= C_FLAG; else m_cpu.flags &= ~C_FLAG;
     modifyFlags( temp );
@@ -1234,53 +1254,53 @@ void NesApu::INY()
 
 void NesApu::LDA()
 {
-    m_cpu.a = getData( m_cpu.absAddr );
+    m_cpu.a = readMem( m_cpu.absAddr );
     modifyFlags( m_cpu.a );
 }
 
 void NesApu::ASL()
 {
-    uint8_t data = m_cpu.implied ? m_cpu.a : getData( m_cpu.absAddr );
+    uint8_t data = m_cpu.implied ? m_cpu.a : readMem( m_cpu.absAddr );
     m_cpu.flags &= ~(C_FLAG | Z_FLAG | N_FLAG);
     m_cpu.flags |= (data & 0x80) ? C_FLAG : 0;
     m_cpu.flags |= (data & 0x40) ? N_FLAG : 0;
     m_cpu.flags |= (data & 0x7F) ? 0 : Z_FLAG;
     data <<= 1;
-    if ( m_cpu.implied ) m_cpu.a = data; else setData( m_cpu.absAddr, data );
+    if ( m_cpu.implied ) m_cpu.a = data; else writeMem( m_cpu.absAddr, data );
 }
 
 void NesApu::LSR()
 {
-    uint8_t data = m_cpu.implied ? m_cpu.a : getData( m_cpu.absAddr );
+    uint8_t data = m_cpu.implied ? m_cpu.a : readMem( m_cpu.absAddr );
     m_cpu.flags &= ~(C_FLAG | Z_FLAG | N_FLAG);
     m_cpu.flags |= (data & 0x01) ? C_FLAG : 0;
     m_cpu.flags |= (data == 1) ? Z_FLAG : 0;
     data >>= 1;
-    if ( m_cpu.implied ) m_cpu.a = data; else setData( m_cpu.absAddr, data );
+    if ( m_cpu.implied ) m_cpu.a = data; else writeMem( m_cpu.absAddr, data );
 }
 
 void NesApu::ROL()
 {
-    uint8_t data = m_cpu.implied ? m_cpu.a : getData( m_cpu.absAddr );
+    uint8_t data = m_cpu.implied ? m_cpu.a : readMem( m_cpu.absAddr );
     uint8_t cflag = (m_cpu.flags & C_FLAG) ? 0x01 : 0x00;
     m_cpu.flags &= ~(C_FLAG | Z_FLAG | N_FLAG);
     m_cpu.flags |= (data & 0x80) ? C_FLAG : 0;
     data <<= 1;
     data |= cflag;
     modifyFlags( data );
-    if ( m_cpu.implied ) m_cpu.a = data; else setData( m_cpu.absAddr, data );
+    if ( m_cpu.implied ) m_cpu.a = data; else writeMem( m_cpu.absAddr, data );
 }
 
 void NesApu::ROR()
 {
-    uint8_t data = m_cpu.implied ? m_cpu.a : getData( m_cpu.absAddr );
+    uint8_t data = m_cpu.implied ? m_cpu.a : readMem( m_cpu.absAddr );
     uint8_t cflag = (m_cpu.flags & C_FLAG) ? 0x80 : 0x00;
     m_cpu.flags &= ~(C_FLAG | Z_FLAG | N_FLAG);
     m_cpu.flags |= (data & 0x01) ? C_FLAG : 0;
     data >>= 1;
     data |= cflag;
     modifyFlags( data );
-    if ( m_cpu.implied ) m_cpu.a = data; else setData( m_cpu.absAddr, data );
+    if ( m_cpu.implied ) m_cpu.a = data; else writeMem( m_cpu.absAddr, data );
 }
 
 void NesApu::CLC()
@@ -1290,12 +1310,12 @@ void NesApu::CLC()
 
 void NesApu::PHA()
 {
-    setData( m_cpu.sp-- + 0x100, m_cpu.a );
+    writeMem( m_cpu.sp-- + 0x100, m_cpu.a );
 }
 
 void NesApu::PLA()
 {
-    m_cpu.a = getData( ++m_cpu.sp + 0x100 );
+    m_cpu.a = readMem( ++m_cpu.sp + 0x100 );
 }
 
 void NesApu::JMP()
@@ -1306,43 +1326,43 @@ void NesApu::JMP()
 void NesApu::JSR()
 {
     uint16_t addr = m_cpu.pc - 1;
-    setData( m_cpu.sp-- + 0x100, addr >> 8 );
-    setData( m_cpu.sp-- + 0x100, addr & 0x00FF );
+    writeMem( m_cpu.sp-- + 0x100, addr >> 8 );
+    writeMem( m_cpu.sp-- + 0x100, addr & 0x00FF );
     m_cpu.pc = m_cpu.absAddr;
 }
 
 void NesApu::RTS()
 {
-    uint16_t addr = getData( ++m_cpu.sp + 0x100 );
-    addr |= static_cast<uint16_t>(getData( ++m_cpu.sp + 0x100 )) << 8;
+    uint16_t addr = readMem( ++m_cpu.sp + 0x100 );
+    addr |= static_cast<uint16_t>(readMem( ++m_cpu.sp + 0x100 )) << 8;
     addr++;
     m_cpu.pc = addr;
 }
 
 void NesApu::STA()
 {
-    setData( m_cpu.absAddr, m_cpu.a );
+    writeMem( m_cpu.absAddr, m_cpu.a );
 }
 
 void NesApu::STX()
 {
-    setData( m_cpu.absAddr, m_cpu.x );
+    writeMem( m_cpu.absAddr, m_cpu.x );
 }
 
 void NesApu::STY()
 {
-    setData( m_cpu.absAddr, m_cpu.y );
+    writeMem( m_cpu.absAddr, m_cpu.y );
 }
 
 void NesApu::LDY()
 {
-    m_cpu.y = getData( m_cpu.absAddr );
+    m_cpu.y = readMem( m_cpu.absAddr );
     modifyFlags( m_cpu.y );
 }
 
 void NesApu::LDX()
 {
-    m_cpu.x = getData( m_cpu.absAddr );
+    m_cpu.x = readMem( m_cpu.absAddr );
     modifyFlags( m_cpu.x );
 }
 
@@ -1388,7 +1408,7 @@ void NesApu::BCS()
 
 void NesApu::CMP()
 {
-    uint8_t data = getData( m_cpu.absAddr );
+    uint8_t data = readMem( m_cpu.absAddr );
     uint16_t temp = (uint16_t)m_cpu.a - (uint16_t)data;
     if ( m_cpu.a >= data ) m_cpu.flags |= C_FLAG; else m_cpu.flags &= ~C_FLAG;
     modifyFlags( temp & 0xFF );
@@ -1396,7 +1416,7 @@ void NesApu::CMP()
 
 void NesApu::CPX()
 {
-    uint8_t data = getData( m_cpu.absAddr );
+    uint8_t data = readMem( m_cpu.absAddr );
     uint16_t temp = (uint16_t)m_cpu.x - (uint16_t)data;
     if ( m_cpu.x >= data ) m_cpu.flags |= C_FLAG; else m_cpu.flags &= ~C_FLAG;
     modifyFlags( temp & 0xFF );
@@ -1404,7 +1424,7 @@ void NesApu::CPX()
 
 void NesApu::CPY()
 {
-    uint8_t data = getData( m_cpu.absAddr );
+    uint8_t data = readMem( m_cpu.absAddr );
     uint16_t temp = (uint16_t)m_cpu.y - (uint16_t)data;
     if ( m_cpu.y >= data ) m_cpu.flags |= C_FLAG; else m_cpu.flags &= ~C_FLAG;
     modifyFlags( temp & 0xFF );
@@ -1412,15 +1432,15 @@ void NesApu::CPY()
 
 void NesApu::DEC()
 {
-    uint8_t data = getData( m_cpu.absAddr ) - 1;
-    setData( m_cpu.absAddr, data );
+    uint8_t data = readMem( m_cpu.absAddr ) - 1;
+    writeMem( m_cpu.absAddr, data );
     modifyFlags( data );
 }
 
 void NesApu::INC()
 {
-    uint8_t data = getData( m_cpu.absAddr ) + 1;
-    setData( m_cpu.absAddr, data );
+    uint8_t data = readMem( m_cpu.absAddr ) + 1;
+    writeMem( m_cpu.absAddr, data );
     modifyFlags( data );
 }
 
@@ -1444,19 +1464,19 @@ void NesApu::INX()
 
 void NesApu::AND()
 {
-    m_cpu.a &= getData( m_cpu.absAddr );
+    m_cpu.a &= readMem( m_cpu.absAddr );
     modifyFlags( m_cpu.a );
 }
 
 void NesApu::ORA()
 {
-    m_cpu.a |= getData( m_cpu.absAddr );
+    m_cpu.a |= readMem( m_cpu.absAddr );
     modifyFlags( m_cpu.a );
 }
 
 void NesApu::EOR()
 {
-    m_cpu.a ^= getData( m_cpu.absAddr );
+    m_cpu.a ^= readMem( m_cpu.absAddr );
     modifyFlags( m_cpu.a );
 }
 
@@ -1467,4 +1487,13 @@ void NesApu::NOP()
 void NesApu::SEC()
 {
     m_cpu.flags |= C_FLAG;
+}
+
+void NesApu::BRK()
+{
+    m_cpu.absAddr = readMem( 0xFFFE );
+    m_cpu.absAddr |= static_cast<uint16_t>( readMem( 0xFFFF) ) << 8;
+    JSR();
+    writeMem( m_cpu.sp-- + 0x100, m_cpu.flags );
+    m_cpu.flags |= B_FLAG;
 }

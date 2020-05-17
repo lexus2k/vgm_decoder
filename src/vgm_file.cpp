@@ -415,11 +415,11 @@ bool VgmFile::setTrack(int track)
     }
     // Reset NES CPU memory and state
     NesCpuState &cpu = m_nesChip->cpuState();
-    for (uint16_t i = 0; i < 0x07FF; i++) m_nesChip->setData(i, 0);
-    for (uint16_t i = 0x4000; i < 0x4013; i++) m_nesChip->setData(i, 0);
-    m_nesChip->setData(0x4015, 0x00);
-    m_nesChip->setData(0x4015, 0x0F);
-    m_nesChip->setData(0x4017, 0x40);
+    for (uint16_t i = 0; i < 0x07FF; i++) m_nesChip->writeMem(i, 0);
+    for (uint16_t i = 0x4000; i < 0x4013; i++) m_nesChip->writeMem(i, 0);
+    m_nesChip->writeMem(0x4015, 0x00);
+    m_nesChip->writeMem(0x4015, 0x0F);
+    m_nesChip->writeMem(0x4017, 0x40);
     // if the tune is bank switched, load the bank values from $070-$077 into $5FF8-$5FFF.
     cpu.x = 0; // ntsc
     cpu.a = track < m_nsfHeader->songIndex ? track: 0;
