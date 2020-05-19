@@ -26,64 +26,55 @@ SOFTWARE.
 
 #include <stdint.h>
 #include "music_decoder.h"
+#include "nes_apu.h"
 
-typedef struct VgmHeader VgmHeader;
 typedef struct NsfHeader NsfHeader;
 
-class VgmFile
+class NsfMusicDecoder: public BaseMusicDecoder
 {
 public:
-    VgmFile();
-    ~VgmFile();
+    NsfMusicDecoder();
+    ~NsfMusicDecoder();
 
-    /** Allows to open NSF and VGM data blocks */
-    bool open(const uint8_t *data, int size);
+    /** Allows to open NSF data blocks */
+    bool open(const uint8_t *data, int size) override;
 
-    /** Closes either VGM or NSF data */
+    static NsfMusicDecoder *tryOpen(const uint8_t *data, int size);
+
+    /** Closes NSF data */
     void close();
 
-    /**
-     * Decodes next block and fill pcm buffer.
-     * If there is not more data to play returns size less than maxSize.
-     * outBuffer is filled up with 16-bit unsigned PCM for 2 channels (stereo).
-     */
-    int decodePcm(uint8_t *outBuffer, int maxSize);
+    uint32_t getSample() override;
 
     /** Sets sampling frequency. ,Must be called before decodePcm */
-    void setSampleFrequency( uint32_t frequency );
+//    void setSampleFrequency( uint32_t frequency ) virtual;
 
     /** Sets volume, default level is 64 */
-    void setVolume(uint16_t volume);
+    void setVolume(uint16_t volume) override;
 
     /** Returns number of tracks in opened file */
-    int getTrackCount();
+    int getTrackCount() override;
 
     /** Sets track to play */
-    bool setTrack(int track);
+    bool setTrack(int track) override;
 
     /**
-     * Sets maximum decoding duration in milliseconds.
-     * Useful for looped music
+     * Decodes data block and returns number of samples to read from decoder.
+     * If it returns -1, then error occured, 0 means - nothing left.
      */
-    void setMaxDuration( uint32_t milliseconds );
+    int decodeBlock() override;
 
 private:
-    BaseMusicDecoder * m_decoder = nullptr;
-
-    /** Duration in samples */
-    uint32_t m_duration = 0;
-
-    uint32_t m_samplesPlayed;
+    NesApu m_nesChip{};
     uint32_t m_waitSamples;
 
-    uint32_t m_readCounter;
-    uint32_t m_writeCounter;
-    uint32_t m_readScaler;
-    uint32_t m_writeScaler;
+    const uint8_t * m_rawData = nullptr;
+    int m_size = 0;
+    int m_headerSize = 0;
+    const uint8_t * m_dataPtr = nullptr;
 
-    uint32_t m_sampleSum;
-    bool m_sampleSumValid = false;
-
-    void interpolateSample();
-    void deleteDecoder();
+    const NsfHeader *m_nsfHeader = nullptr;
 };
+
+
+

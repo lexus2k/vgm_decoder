@@ -150,6 +150,7 @@ private:
     uint8_t m_stopSp;
     uint8_t *m_ram = nullptr;
     uint8_t m_bank[8];
+    bool m_bankingEnabled = false;
 
     static const NesApu::Instruction commands[256];
 

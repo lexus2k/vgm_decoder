@@ -151,18 +151,16 @@ static constexpr uint32_t noise_freq_table[] =
 
 inline uint8_t getRegIndex(uint16_t reg)
 {
-    if ( reg < 0x4000 ) return reg;
-    if ( reg <= 0x407F )
+    if ( reg >= 0x4000 && reg < 0x4020 )
     {
-        if ( reg == 4023 ) return 0x3F;
         return reg - 0x4000;
     }
-    return reg - 0x4060;
+    return reg;
 }
 
 inline uint16_t getRegAddress(uint8_t reg)
 {
-    if ( reg < 128 ) reg += 0x4000;
+    if ( reg < 0x20 ) reg += 0x4000;
     return reg;
 }
 
@@ -185,6 +183,7 @@ void NesApu::reset()
 {
     m_shiftNoise = 0x0001;
     m_lastFrameCounter = 0;
+    m_bankingEnabled = false;
     m_mapper031BaseAddress = 0xFFFF;
     for (int i=0; i<APU_MAX_MEMORY_BLOCKS; i++)
     {
@@ -309,6 +308,7 @@ void NesApu::write(uint16_t reg, uint8_t val)
             // Bank switching registers
             if ( originReg >= 0x5000 && originReg <= 0x5FFF )
             {
+                m_bankingEnabled = true;
                 m_bank[originReg & 0x07] = val;
                 LOGI( "BANK %d [%04X] = %02X (%d) 0x%08X\n", originReg & 0x07, originReg,
                       val, 0x8000 + val * 4096, 0x8000 + val * 4096 );
@@ -787,6 +787,10 @@ void NesApu::updateFrameCounter()
 
 uint32_t NesApu::mapper031(uint16_t address)
 {
+    if ( ! m_bankingEnabled )
+    {
+         return address;
+    }
     if ( address < 0x8000 )
     {
         return address;

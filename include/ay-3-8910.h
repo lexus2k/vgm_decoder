@@ -47,7 +47,12 @@ enum
 class AY38910
 {
 public:
+    AY38910() = default;
+
     AY38910(uint8_t chipType, uint8_t flags);
+
+    /** Sets chip configuration */
+    void setType( uint8_t chipType, uint8_t flags );
 
     /** Resets ay-3-8910 state */
     void reset();

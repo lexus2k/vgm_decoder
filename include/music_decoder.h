@@ -25,65 +25,39 @@ SOFTWARE.
 #pragma once
 
 #include <stdint.h>
-#include "music_decoder.h"
+
+#include "ay-3-8910.h"
+#include "nes_apu.h"
 
 typedef struct VgmHeader VgmHeader;
 typedef struct NsfHeader NsfHeader;
 
-class VgmFile
+class BaseMusicDecoder
 {
 public:
-    VgmFile();
-    ~VgmFile();
+    BaseMusicDecoder() = default;
+    virtual ~BaseMusicDecoder() = default;
 
     /** Allows to open NSF and VGM data blocks */
-    bool open(const uint8_t *data, int size);
+    virtual bool open(const uint8_t *data, int size) = 0;
 
-    /** Closes either VGM or NSF data */
-    void close();
+    virtual uint32_t getSample() = 0;
 
     /**
-     * Decodes next block and fill pcm buffer.
-     * If there is not more data to play returns size less than maxSize.
-     * outBuffer is filled up with 16-bit unsigned PCM for 2 channels (stereo).
+     * Decodes data block and returns number of samples to read from decoder.
+     * If it returns -1, then error occured, 0 means - nothing left.
      */
-    int decodePcm(uint8_t *outBuffer, int maxSize);
+    virtual int decodeBlock() = 0;
 
     /** Sets sampling frequency. ,Must be called before decodePcm */
-    void setSampleFrequency( uint32_t frequency );
+//    void setSampleFrequency( uint32_t frequency ) virtual;
 
     /** Sets volume, default level is 64 */
-    void setVolume(uint16_t volume);
+    virtual void setVolume(uint16_t volume) {}
 
     /** Returns number of tracks in opened file */
-    int getTrackCount();
+    virtual int getTrackCount() { return 1; }
 
     /** Sets track to play */
-    bool setTrack(int track);
-
-    /**
-     * Sets maximum decoding duration in milliseconds.
-     * Useful for looped music
-     */
-    void setMaxDuration( uint32_t milliseconds );
-
-private:
-    BaseMusicDecoder * m_decoder = nullptr;
-
-    /** Duration in samples */
-    uint32_t m_duration = 0;
-
-    uint32_t m_samplesPlayed;
-    uint32_t m_waitSamples;
-
-    uint32_t m_readCounter;
-    uint32_t m_writeCounter;
-    uint32_t m_readScaler;
-    uint32_t m_writeScaler;
-
-    uint32_t m_sampleSum;
-    bool m_sampleSumValid = false;
-
-    void interpolateSample();
-    void deleteDecoder();
+    virtual bool setTrack(int track) { return true; };
 };

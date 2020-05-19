@@ -25,7 +25,7 @@ default: all
 
 CPPFLAGS += -I./include
 
-OBJS=src/ay-3-8910.o src/nes_apu.o main.o src/vgm_file.o
+OBJS=src/ay-3-8910.o src/nes_apu.o main.o src/vgm_decoder.o src/nsf_decoder.o src/vgm_file.o
 
 all: $(OBJS)
 	$(CXX) -o vgm2wav $(CCFLAGS) $(OBJS) $(LDFLAGS)

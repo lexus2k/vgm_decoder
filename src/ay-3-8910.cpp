@@ -130,9 +130,14 @@ enum
 
 
 AY38910::AY38910(uint8_t chipType, uint8_t flags)
-    : m_chipType( chipType )
-    , m_flags( flags )
 {
+    setType( chipType, flags );
+}
+
+void AY38910::setType( uint8_t chipType, uint8_t flags )
+{
+    m_chipType = chipType;
+    m_flags = flags;
     reset();
 }
 
