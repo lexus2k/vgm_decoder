@@ -26,7 +26,7 @@ SOFTWARE.
 
 #include <stdint.h>
 #include "music_decoder.h"
-#include "nes_apu.h"
+#include "chips/nes_apu.h"
 
 typedef struct NsfHeader NsfHeader;
 

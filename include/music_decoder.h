@@ -26,12 +26,6 @@ SOFTWARE.
 
 #include <stdint.h>
 
-#include "ay-3-8910.h"
-#include "nes_apu.h"
-
-typedef struct VgmHeader VgmHeader;
-typedef struct NsfHeader NsfHeader;
-
 class BaseMusicDecoder
 {
 public:

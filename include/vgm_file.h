@@ -27,9 +27,6 @@ SOFTWARE.
 #include <stdint.h>
 #include "music_decoder.h"
 
-typedef struct VgmHeader VgmHeader;
-typedef struct NsfHeader NsfHeader;
-
 class VgmFile
 {
 public:

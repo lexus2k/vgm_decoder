@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "nes_apu.h"
+#include "chips/nes_apu.h"
 
 #include <malloc.h>
 #include <stdio.h>
@@ -33,7 +33,7 @@ SOFTWARE.
 #if NES_APU_DEBUG && !defined(VGM_DECODER_LOGGER)
 #define VGM_DECODER_LOGGER NES_APU_DEBUG
 #endif
-#include "vgm_logger.h"
+#include "../vgm_logger.h"
 
 #define NES_CPU_FREQUENCY (1789773)
 #define SAMPLING_RATE  (44100)

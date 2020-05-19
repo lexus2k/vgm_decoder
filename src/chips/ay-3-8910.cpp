@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "ay-3-8910.h"
+#include "chips/ay-3-8910.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -32,7 +32,7 @@ SOFTWARE.
 #if AY38910_DEBUG && !defined(VGM_DECODER_LOGGER)
 #define VGM_DECODER_LOGGER 1
 #endif
-#include "vgm_logger.h"
+#include "../vgm_logger.h"
 
 
 #define YM2149_PIN26_LOW   (0x10)

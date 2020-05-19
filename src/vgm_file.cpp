@@ -23,8 +23,8 @@ SOFTWARE.
 */
 
 #include "vgm_file.h"
-#include "vgm_decoder.h"
-#include "nsf_decoder.h"
+#include "formats/vgm_decoder.h"
+#include "formats/nsf_decoder.h"
 
 #define VGM_FILE_DEBUG 1
 

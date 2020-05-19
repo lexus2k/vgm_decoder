@@ -27,8 +27,8 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "music_decoder.h"
-#include "ay-3-8910.h"
-#include "nes_apu.h"
+#include "chips/ay-3-8910.h"
+#include "chips/nes_apu.h"
 
 typedef struct VgmHeader VgmHeader;
 

@@ -30,7 +30,7 @@ SOFTWARE.
 #if NSF_DECODER_DEBUG && !defined(VGM_DECODER_LOGGER)
 #define VGM_DECODER_LOGGER NSF_DECODER_DEBUG
 #endif
-#include "vgm_logger.h"
+#include "../vgm_logger.h"
 
 /** Vgm file are always based on 44.1kHz rate */
 #define VGM_SAMPLE_RATE 44100
