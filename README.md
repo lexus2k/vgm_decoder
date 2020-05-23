@@ -13,6 +13,7 @@ It recognizes:
 ## Usage
 
 > ./vgm2wav crisis_force.nsf crisis_force.wav 0
+>
 > DONE
 
 Now open crisis_force.wav in any audio player.
