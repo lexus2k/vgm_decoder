@@ -56,8 +56,11 @@ public:
      * @param len length of memory data.
      */
     void setDataBlock( uint32_t addr, const uint8_t *data, uint32_t len );
+
 private:
     NesMemoryBlock m_mem[APU_MAX_MEMORY_BLOCKS]{};
+    /** Battery backed RAM */
+    uint8_t *m_bbRam = nullptr;
     uint8_t m_bank[8]{};
     bool m_bankingEnabled = false;
     uint16_t m_mapper031BaseAddress = 0xFFFF;

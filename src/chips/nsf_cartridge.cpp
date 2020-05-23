@@ -49,6 +49,11 @@ NsfCartridge::~NsfCartridge()
     {
         m_mem[i].data = nullptr;
     }
+    if ( m_bbRam != nullptr )
+    {
+        free( m_bbRam );
+        m_bbRam = nullptr;
+    }
 }
 
 void NsfCartridge::reset()
@@ -59,7 +64,7 @@ void NsfCartridge::power()
 {
 }
 
-bool NsfCartridge::write(uint16_t address, uint8_t val)
+bool NsfCartridge::write(uint16_t address, uint8_t data)
 {
     uint32_t mappedAddr = mapper031( address );
     if ( address < 0x5000 )
@@ -70,15 +75,17 @@ bool NsfCartridge::write(uint16_t address, uint8_t val)
     if ( address <= 0x5FFF )
     {
         m_bankingEnabled = true;
-        m_bank[ address & 0x07] = val;
+        m_bank[ address & 0x07] = data;
         LOGI( "BANK %d [%04X] = %02X (%d) 0x%08X\n", address & 0x07, address,
-               val, 0x8000 + val * 4096, 0x8000 + val * 4096 );
+               data, 0x8000 + data * 4096, 0x8000 + data * 4096 );
         return true;
     }
     if ( address < 0x8000 )
     {
-        LOGE( "Memory data write error (Battery backed RAM) 0x%04X\n", address );
-        return false;
+        if ( m_bbRam == nullptr ) m_bbRam = static_cast<uint8_t *>(malloc(8192));
+        m_bbRam[ address - 0x6000 ] = data;
+        LOGM("Battery backed RAM [%04X] <== %02X\n", address, data);
+        return true;
     }
     LOGE("Memory data write error (ROM) 0x%04X\n", address);
     return false;
@@ -100,8 +107,9 @@ uint8_t NsfCartridge::read(uint16_t address)
     // Cartridge
     else if ( address >= 0x6000 && address < 0x8000 )
     {
-        LOGE("Memory data fetch error (Battery backed RAM) 0x%04X\n", address);
-        return 0;
+        if ( m_bbRam == nullptr ) m_bbRam = static_cast<uint8_t *>(malloc(8192));
+        LOGM("Battery backed RAM [%04X] ==> %02X\n", address, m_bbRam[ address - 0x6000 ]);
+        return m_bbRam[ address - 0x6000 ];
     }
     for (int i=0; i<APU_MAX_MEMORY_BLOCKS; i++)
     {
