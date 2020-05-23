@@ -24,6 +24,7 @@ SOFTWARE.
 
 #include "vgm_decoder.h"
 #include "vgm_format.h"
+#include "chips/nsf_cartridge.h"
 
 #define VGM_DECODER_DEBUG 1
 
@@ -124,7 +125,9 @@ bool VgmMusicDecoder::open(const uint8_t * data, int size)
     }
     else if ( m_header->nesApuClock )
     {
-        m_nesChip = new NesApu();
+        m_nesChip = new NesCpu();
+        NsfCartridge *cartridge = new NsfCartridge();
+        m_nesChip->insertCartridge( cartridge );
 //        m_nesChip->setFrequency( m_header->nesApuClock );
     }
 
@@ -221,7 +224,10 @@ bool VgmMusicDecoder::nextCommand()
         {
             LOG( " [DATA BLOCK type=0x%02X, len=0x%02X%02X%02X%02X]\n", m_dataPtr[2], m_dataPtr[6], m_dataPtr[5], m_dataPtr[4], m_dataPtr[3] );
             uint32_t dataLength = (m_dataPtr[3] + (m_dataPtr[4] << 8) + (m_dataPtr[5] << 16) + (m_dataPtr[6] << 24));
-            if ( m_nesChip ) m_nesChip->setDataBlock( m_dataPtr + 7, dataLength );
+            if ( m_nesChip && m_nesChip->getCartridge() )
+            {
+                reinterpret_cast<NsfCartridge *>(m_nesChip->getCartridge())->setDataBlock( m_dataPtr + 7, dataLength );
+            }
             m_dataPtr += 7 + dataLength;
             break;
         }
@@ -239,7 +245,7 @@ bool VgmMusicDecoder::nextCommand()
                    //       register 3F equals NES address 4023,
                    //       registers 40-7F equal NES address 4040-407F.
             LOG( " [write nesAPU reg [0x%02X] = 0x%02X ]", m_dataPtr[1], m_dataPtr[2]);
-            m_nesChip->write( m_dataPtr[1], m_dataPtr[2] );
+            m_nesChip->getApu()->write( m_dataPtr[1], m_dataPtr[2] );
             m_dataPtr += 3;
             break;
         case 0xB0: // aa dd : RF5C68, write value dd to register aa
@@ -354,14 +360,14 @@ bool VgmMusicDecoder::nextCommand()
 void VgmMusicDecoder::setVolume( uint16_t volume )
 {
     if ( m_msxChip ) m_msxChip->setVolume( volume );
-    if ( m_nesChip ) m_nesChip->setVolume( volume );
+    if ( m_nesChip ) m_nesChip->getApu()->setVolume( volume );
 }
 
 uint32_t VgmMusicDecoder::getSample()
 {
     m_samplesPlayed++;
     if ( m_msxChip ) return m_msxChip->getSample();
-    if ( m_nesChip ) return m_nesChip->getSample();
+    if ( m_nesChip ) return m_nesChip->getApu()->getSample();
     return 0;
 }
 

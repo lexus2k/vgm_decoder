@@ -28,7 +28,7 @@ SOFTWARE.
 
 #include "music_decoder.h"
 #include "chips/ay-3-8910.h"
-#include "chips/nes_apu.h"
+#include "chips/nes_cpu.h"
 
 typedef struct VgmHeader VgmHeader;
 
@@ -59,7 +59,7 @@ public:
 
 private:
     AY38910 *m_msxChip = nullptr;
-    NesApu  *m_nesChip = nullptr;
+    NesCpu  *m_nesChip = nullptr;
 
     const uint8_t * m_rawData = nullptr;
     int m_size = 0;

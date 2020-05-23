@@ -27,6 +27,8 @@ CPPFLAGS += -I./include -I./src
 
 OBJS=src/chips/ay-3-8910.o \
      src/chips/nes_apu.o \
+     src/chips/nes_cpu.o \
+     src/chips/nsf_cartridge.o \
      main.o \
      src/formats/vgm_decoder.o \
      src/formats/nsf_decoder.o \

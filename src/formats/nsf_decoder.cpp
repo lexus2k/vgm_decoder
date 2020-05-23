@@ -24,6 +24,7 @@ SOFTWARE.
 
 #include "nsf_decoder.h"
 #include "nsf_format.h"
+#include "chips/nsf_cartridge.h"
 
 #define NSF_DECODER_DEBUG 1
 
@@ -72,7 +73,9 @@ bool NsfMusicDecoder::open(const uint8_t * data, int size)
         m_nsfHeader = nullptr;
         return false;
     }
-
+    NsfCartridge *cartridge = new NsfCartridge();
+    cartridge->setDataBlock( m_nsfHeader->loadAddress, m_dataPtr + 0x80, m_size - 0x80 );
+    m_nesChip.insertCartridge( cartridge );
     if ( !setTrack( 0 ) )
     {
         return false;
@@ -85,13 +88,14 @@ bool NsfMusicDecoder::open(const uint8_t * data, int size)
 
 void NsfMusicDecoder::close()
 {
+    m_nesChip.insertCartridge( nullptr );
     m_nsfHeader = nullptr;
     m_rawData = nullptr;
 }
 
 void NsfMusicDecoder::setVolume( uint16_t volume )
 {
-    m_nesChip.setVolume( volume );
+    m_nesChip.getApu()->setVolume( volume );
 }
 
 int NsfMusicDecoder::getTrackCount()
@@ -107,7 +111,6 @@ bool NsfMusicDecoder::setTrack(int track)
     if ( !m_nsfHeader ) return false;
 
     m_nesChip.reset();
-    m_nesChip.setDataBlock( m_nsfHeader->loadAddress, m_dataPtr + 0x80, m_size - 0x80 );
     bool useBanks = false;
     for (int i=0; i<8; i++)
         if ( m_nsfHeader->bankSwitch[i] )
@@ -119,11 +122,11 @@ bool NsfMusicDecoder::setTrack(int track)
     }
     // Reset NES CPU memory and state
     NesCpuState &cpu = m_nesChip.cpuState();
-    for (uint16_t i = 0; i < 0x07FF; i++) m_nesChip.writeMem(i, 0);
-    for (uint16_t i = 0x4000; i < 0x4013; i++) m_nesChip.writeMem(i, 0);
-    m_nesChip.writeMem(0x4015, 0x00);
-    m_nesChip.writeMem(0x4015, 0x0F);
-    m_nesChip.writeMem(0x4017, 0x40);
+    for (uint16_t i = 0; i < 0x07FF; i++) m_nesChip.write(i, 0);
+    for (uint16_t i = 0x4000; i < 0x4013; i++) m_nesChip.write(i, 0);
+    m_nesChip.write(0x4015, 0x00);
+    m_nesChip.write(0x4015, 0x0F);
+    m_nesChip.write(0x4017, 0x40);
     // if the tune is bank switched, load the bank values from $070-$077 into $5FF8-$5FFF.
     cpu.x = 0; // ntsc
     cpu.a = track < m_nsfHeader->songIndex ? track: 0;
@@ -139,7 +142,7 @@ bool NsfMusicDecoder::setTrack(int track)
 
 uint32_t NsfMusicDecoder::getSample()
 {
-    return m_nesChip.getSample();
+    return m_nesChip.getApu()->getSample();
 }
 
 int NsfMusicDecoder::decodeBlock()

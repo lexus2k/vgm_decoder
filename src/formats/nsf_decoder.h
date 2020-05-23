@@ -26,7 +26,7 @@ SOFTWARE.
 
 #include <stdint.h>
 #include "music_decoder.h"
-#include "chips/nes_apu.h"
+#include "chips/nes_cpu.h"
 
 typedef struct NsfHeader NsfHeader;
 
@@ -65,7 +65,7 @@ public:
     int decodeBlock() override;
 
 private:
-    NesApu m_nesChip{};
+    NesCpu m_nesChip{};
     uint32_t m_waitSamples;
 
     const uint8_t * m_rawData = nullptr;
