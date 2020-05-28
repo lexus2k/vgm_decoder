@@ -23,7 +23,7 @@ SOFTWARE.
 */
 
 #include "nsf_decoder.h"
-#include "nsf_format.h"
+#include "formats/nsf_format.h"
 #include "chips/nsf_cartridge.h"
 
 #define NSF_DECODER_DEBUG 1

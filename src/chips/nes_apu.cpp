@@ -40,8 +40,8 @@ SOFTWARE.
 #define SAMPLING_RATE  (44100)
 #define CONST_SHIFT_BITS (4)
 
-static constexpr uint32_t counterScaler = ((NES_CPU_FREQUENCY<<CONST_SHIFT_BITS) / SAMPLING_RATE);
-static constexpr uint32_t frameCounterPeriod = ((NES_CPU_FREQUENCY<<CONST_SHIFT_BITS) / 240 );
+static constexpr uint32_t counterScaler = ((NES_CPU_FREQUENCY << CONST_SHIFT_BITS) / SAMPLING_RATE);
+static constexpr uint32_t frameCounterPeriod = ((NES_CPU_FREQUENCY << CONST_SHIFT_BITS) / 240 );
 
 static constexpr uint8_t lengthLut[] =
 {
@@ -312,6 +312,7 @@ uint8_t NesApu::read(uint16_t reg)
 
 uint32_t NesApu::getSample()
 {
+//    m_apuIncrement = counterScaler; /* 40.5 cpu ticks */
     updateFrameCounter();
 
     updateRectChannel(0);

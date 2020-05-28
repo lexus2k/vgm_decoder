@@ -74,7 +74,10 @@ public:
     /** Reads data from sepcified register */
     uint8_t read(uint16_t reg);
 
-    /** Returns next sample */
+    /**
+     * Returns next sample at 44100 frequency rate. Each call to getSample()
+     * simulates ~ 40.5 nes cpu ticks (1789773 Hz / 44100 Hz).
+     */
     uint32_t getSample();
 
     /** Sets volume, default volume is 64 */

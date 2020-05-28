@@ -23,7 +23,7 @@ SOFTWARE.
 */
 
 #include "vgm_decoder.h"
-#include "vgm_format.h"
+#include "formats/vgm_format.h"
 #include "chips/nsf_cartridge.h"
 
 #define VGM_DECODER_DEBUG 1

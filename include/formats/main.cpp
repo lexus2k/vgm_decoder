@@ -23,10 +23,27 @@ SOFTWARE.
 */
 
 #include "vgm_file.h"
-#include "formats/wav_format.h"
 
 #include <stdio.h>
 #include <stdlib.h>
+
+typedef struct
+{
+    uint32_t chunkId; // 0x52494646
+    uint32_t chunkSize; //  36 + SubChunk2Size, or more precisely: 4 + (8 + SubChunk1Size) + (8 + SubChunk2Size)
+    uint32_t format; // 0x57415645
+    uint32_t subchunk1Id; // 0x666d7420
+    uint32_t subchunk1Size; // 16
+    uint16_t audioFormat; // 1 - PCM
+    uint16_t numChannels; // 2
+    uint32_t sampleRate; // 44100
+    uint32_t byteRate; // == SampleRate * NumChannels * BitsPerSample/8
+    uint16_t blockAlign; // == NumChannels * BitsPerSample/8
+    uint16_t bitsPerSample; // 16
+    uint32_t subchunk2Id; // 0x64617461
+    uint32_t subchunk2Size; // in bytes
+} WaveHeader;
+
 
 int readFile(const char *name, uint8_t **buffer )
 {
