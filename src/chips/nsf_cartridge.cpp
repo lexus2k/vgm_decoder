@@ -82,7 +82,15 @@ bool NsfCartridge::write(uint16_t address, uint8_t data)
     }
     if ( address < 0x8000 )
     {
-        if ( m_bbRam == nullptr ) m_bbRam = static_cast<uint8_t *>(malloc(8192));
+        if ( m_bbRam == nullptr )
+        {
+            m_bbRam = static_cast<uint8_t *>(malloc(8192));
+            if ( m_bbRam == nullptr )
+            {
+                LOGE("Failed to allocate battery backed RAM 0x%04X\n", address);
+                return false;
+            }
+        }
         m_bbRam[ address - 0x6000 ] = data;
         LOGM("Battery backed RAM [%04X] <== %02X\n", address, data);
         return true;
@@ -100,14 +108,22 @@ uint8_t NsfCartridge::read(uint16_t address)
         LOGE( "Not cartridge space: 0x%04X (mapped to 0x%08X)\n", address, mappedAddr);
         return 0xFF;
     }
-    else if ( address < 0x6000 )
+    if ( address < 0x6000 )
     {
         return m_bank[ address & 0x07 ];
     }
     // Cartridge
-    else if ( address >= 0x6000 && address < 0x8000 )
+    if ( address >= 0x6000 && address < 0x8000 )
     {
-        if ( m_bbRam == nullptr ) m_bbRam = static_cast<uint8_t *>(malloc(8192));
+        if ( m_bbRam == nullptr )
+        {
+            m_bbRam = static_cast<uint8_t *>(malloc(8192));
+            if ( m_bbRam == nullptr )
+            {
+                LOGE("Failed to allocate battery backed RAM 0x%04X\n", address);
+                return 0xFF;
+            }
+        }
         LOGM("Battery backed RAM [%04X] ==> %02X\n", address, m_bbRam[ address - 0x6000 ]);
         return m_bbRam[ address - 0x6000 ];
     }
@@ -116,7 +132,7 @@ uint8_t NsfCartridge::read(uint16_t address)
         if ( m_mem[i].data == nullptr )
         {
             LOGE("Memory data fetch error 0x%04X (mapped to 0x%08X)\n", address, mappedAddr);
-            return 0;
+            break;
         }
         if ( mappedAddr >= m_mem[i].addr &&
              mappedAddr < m_mem[i].addr + m_mem[i].size )
