@@ -26,6 +26,9 @@ SOFTWARE.
 
 #include <malloc.h>
 #include <stdio.h>
+#include <string.h>
+
+#define CLR_VALUE 0x00
 
 #define NSF_CARTRIDGE_DEBUG 1
 
@@ -64,6 +67,20 @@ void NsfCartridge::power()
 {
 }
 
+bool NsfCartridge::allocBbRam()
+{
+    if ( m_bbRam == nullptr )
+    {
+        m_bbRam = static_cast<uint8_t *>(malloc(8192));
+        if ( m_bbRam == nullptr )
+        {
+            return false;
+        }
+        memset( m_bbRam, CLR_VALUE, 8192 );
+    }
+    return true;
+}
+
 bool NsfCartridge::write(uint16_t address, uint8_t data)
 {
     uint32_t mappedAddr = mapper031( address );
@@ -82,14 +99,10 @@ bool NsfCartridge::write(uint16_t address, uint8_t data)
     }
     if ( address < 0x8000 )
     {
-        if ( m_bbRam == nullptr )
+        if ( !allocBbRam() )
         {
-            m_bbRam = static_cast<uint8_t *>(malloc(8192));
-            if ( m_bbRam == nullptr )
-            {
-                LOGE("Failed to allocate battery backed RAM 0x%04X\n", address);
-                return false;
-            }
+            LOGE("Failed to allocate battery backed RAM 0x%04X\n", address);
+            return false;
         }
         m_bbRam[ address - 0x6000 ] = data;
         LOGM("Battery backed RAM [%04X] <== %02X\n", address, data);
@@ -106,7 +119,7 @@ uint8_t NsfCartridge::read(uint16_t address)
     if ( address < 0x5000 )
     {
         LOGE( "Not cartridge space: 0x%04X (mapped to 0x%08X)\n", address, mappedAddr);
-        return 0xFF;
+        return CLR_VALUE;
     }
     if ( address < 0x6000 )
     {
@@ -115,14 +128,10 @@ uint8_t NsfCartridge::read(uint16_t address)
     // Cartridge
     if ( address >= 0x6000 && address < 0x8000 )
     {
-        if ( m_bbRam == nullptr )
+        if ( !allocBbRam() )
         {
-            m_bbRam = static_cast<uint8_t *>(malloc(8192));
-            if ( m_bbRam == nullptr )
-            {
-                LOGE("Failed to allocate battery backed RAM 0x%04X\n", address);
-                return 0xFF;
-            }
+            LOGE("Failed to allocate battery backed RAM 0x%04X\n", address);
+            return CLR_VALUE;
         }
         LOGM("Battery backed RAM [%04X] ==> %02X\n", address, m_bbRam[ address - 0x6000 ]);
         return m_bbRam[ address - 0x6000 ];
@@ -142,7 +151,7 @@ uint8_t NsfCartridge::read(uint16_t address)
             return  m_mem[i].data[ addr ];
         }
     }
-    return 0xFF;
+    return CLR_VALUE;
 }
 
 void NsfCartridge::setDataBlock( const uint8_t *data, uint32_t len )

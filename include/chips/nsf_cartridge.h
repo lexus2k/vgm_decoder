@@ -66,5 +66,7 @@ private:
     uint16_t m_mapper031BaseAddress = 0xFFFF;
 
     uint32_t mapper031(uint16_t address);
+
+    bool allocBbRam();
 };
 
