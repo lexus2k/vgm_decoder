@@ -103,7 +103,7 @@ typedef struct
 
 void VgmFile::interpolateSample()
 {
-    uint32_t nextSample = m_decoder ? m_decoder->getSample() : 0;
+    uint32_t nextSample = m_decoder->getSample();
     StereoChannels &source = reinterpret_cast<StereoChannels&>(nextSample);
     StereoChannels &dest = reinterpret_cast<StereoChannels&>(m_sampleSum);
 
@@ -127,6 +127,10 @@ void VgmFile::interpolateSample()
 int VgmFile::decodePcm(uint8_t *outBuffer, int maxSize)
 {
     int decoded = 0;
+    if ( !m_decoder )
+    {
+        return 0;
+    }
     while ( decoded + 4 <= maxSize )
     {
         if ( !m_waitSamples )
@@ -177,8 +181,4 @@ int VgmFile::decodePcm(uint8_t *outBuffer, int maxSize)
 void VgmFile::setSampleFrequency( uint32_t frequency )
 {
     m_writeScaler = frequency;
-//    if ( m_msxChip && m_msxChip->getSampleFrequency() != VGM_SAMPLE_RATE )
-//    {
-//        LOGE( "Error: chip must run at 44100 Hz sample frequency!!!\n" );
-//    }
 }
