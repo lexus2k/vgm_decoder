@@ -159,6 +159,7 @@ private:
     void LDA();
     void ASL();
     void CLC();
+    void BIT();
     void JMP();
     void JSR();
     void STA();

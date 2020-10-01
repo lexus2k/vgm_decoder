@@ -263,9 +263,9 @@ const NesCpu::Instruction NesCpu::commands[256] =
 /*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
 /* 1X */{ &c::CLC, &c::UND }, { &c::ORA, &c::ABY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::ORA, &c::ABX }, { &c::ASL, &c::ABX }, { &c::UND, &c::UND },
 /*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
-/* 2X */{ &c::JSR, &c::ABS }, { &c::AND, &c::IDX }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::AND, &c::ZP  }, { &c::ROL, &c::ZP  }, { &c::UND, &c::UND },
+/* 2X */{ &c::JSR, &c::ABS }, { &c::AND, &c::IDX }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::BIT, &c::ZP  }, { &c::AND, &c::ZP  }, { &c::ROL, &c::ZP  }, { &c::UND, &c::UND },
 /*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
-/* 2X */{ &c::UND, &c::UND }, { &c::AND, &c::IMD }, { &c::ROL, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::AND, &c::ABS }, { &c::ROL, &c::ABS }, { &c::UND, &c::UND },
+/* 2X */{ &c::UND, &c::UND }, { &c::AND, &c::IMD }, { &c::ROL, &c::UND }, { &c::UND, &c::UND }, { &c::BIT, &c::ABS }, { &c::AND, &c::ABS }, { &c::ROL, &c::ABS }, { &c::UND, &c::UND },
 /*      X0                    X1                    X2                    X3                    X4                    X5                    X6                    X7                 */
 /* 3X */{ &c::BMI, &c::REL }, { &c::AND, &c::IDY }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::UND, &c::UND }, { &c::AND, &c::ZPX }, { &c::ROL, &c::ZPX }, { &c::UND, &c::UND },
 /*      X8                    X9                    XA                    XB                    XC                    XD                    XE                    XF                 */
@@ -365,6 +365,7 @@ std::string NesCpu::getOpCode(const Instruction & instruction, uint16_t data)
     GEN_OPCODE(PHA);
     GEN_OPCODE(PLA);
     GEN_OPCODE(SEC);
+    GEN_OPCODE(BIT);
 
     GEN_ADDRMODE(UND, "");
     GEN_ADDRMODE(IMD, " #" + hexToString( static_cast<uint8_t>( data ) ) );
@@ -681,6 +682,15 @@ void NesCpu::INC()
     uint8_t data = read( m_cpu.absAddr ) + 1;
     write( m_cpu.absAddr, data );
     modifyFlags( data );
+}
+
+void NesCpu::BIT()
+{
+    uint8_t data = read( m_cpu.absAddr );
+    uint8_t result = m_cpu.a & data;
+    if ( result ) m_cpu.flags &= ~Z_FLAG; else m_cpu.flags |= Z_FLAG;
+    if ( data & 0x40 ) m_cpu.flags |= V_FLAG; else m_cpu.flags &= ~V_FLAG;
+    if ( data & 0x80 ) m_cpu.flags |= N_FLAG; else m_cpu.flags &= ~N_FLAG;
 }
 
 void NesCpu::DEX()
