@@ -297,6 +297,7 @@ void NesApu::write(uint16_t reg, uint8_t val)
 
 void NesApu::setVolume(uint16_t volume)
 {
+    m_volume = volume;
     for(int i=0; i<16; i++)
     {
         uint32_t vol = static_cast<uint32_t>(nesApuLevelTable[i]) * volume / 64;
