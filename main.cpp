@@ -71,9 +71,9 @@ int writeFile(const char *name, VgmFile *vgm, int trackIndex)
         0x61746164, 0
     };
     fwrite( &header, sizeof(header), 1, fileptr );
-    vgm->setVolume( 128 );
     vgm->setSampleFrequency( 44100 );
     vgm->setTrack( trackIndex );
+    vgm->setVolume( 128 );
     for(;;)
     {
         int size = vgm->decodePcm(buffer, sizeof(buffer));
