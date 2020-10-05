@@ -64,6 +64,13 @@ public:
      */
     void setMaxDuration( uint32_t milliseconds );
 
+    /**
+     * Enables fade effect
+     *
+     * @param enable true to enable fade effect at the end
+     */
+    void setFading(bool enable);
+
 private:
     BaseMusicDecoder * m_decoder = nullptr;
 
@@ -80,6 +87,9 @@ private:
 
     uint32_t m_sampleSum;
     bool m_sampleSumValid = false;
+    bool m_fadeEffect = false;
+    uint8_t m_shifter = 0;
+    uint16_t m_volume = 64;
 
     void interpolateSample();
     void deleteDecoder();

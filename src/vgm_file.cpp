@@ -63,9 +63,15 @@ bool VgmFile::open(const uint8_t * data, int size)
     m_samplesPlayed = 0;
     m_waitSamples = 0;
     m_decoder = VgmMusicDecoder::tryOpen( data, size );
-    if ( m_decoder ) return true;
-    m_decoder = NsfMusicDecoder::tryOpen( data, size );
-    if ( m_decoder ) return true;
+    if ( !m_decoder )
+    {
+        m_decoder = NsfMusicDecoder::tryOpen( data, size );
+    }
+    if ( m_decoder )
+    {
+        if ( m_volume != 64 ) m_decoder->setVolume( m_volume );
+        return true;
+    }
     return false;
 }
 
@@ -76,7 +82,8 @@ void VgmFile::close()
 
 void VgmFile::setVolume( uint16_t volume )
 {
-    if ( m_decoder ) m_decoder->setVolume( volume );
+    m_volume = volume;
+    if ( m_decoder ) m_decoder->setVolume( m_volume );
 }
 
 int VgmFile::getTrackCount()
@@ -105,14 +112,16 @@ void VgmFile::interpolateSample()
 {
     uint32_t nextSample = m_decoder->getSample();
     StereoChannels &source = reinterpret_cast<StereoChannels&>(nextSample);
-    StereoChannels &dest = reinterpret_cast<StereoChannels&>(m_sampleSum);
+//    StereoChannels &dest = reinterpret_cast<StereoChannels&>(m_sampleSum);
+    source.left >>= m_shifter;
+    source.right >>= m_shifter;
 
     if ( !m_sampleSumValid ) // If no sample previously reached the mixer assign new sample
     {
         m_sampleSum = nextSample;
         m_sampleSumValid = true;
     }
-    if ( (source.left >= 8192 && source.left > dest.left) ||
+/*    if ( (source.left >= 8192 && source.left > dest.left) ||
          (source.left < 8192 && source.left < dest.left) )
     {
         dest.left = source.left;
@@ -121,7 +130,7 @@ void VgmFile::interpolateSample()
          (source.right < 8192 && source.right < dest.right) )
     {
         dest.right = source.right;
-    }
+    } */
 }
 
 int VgmFile::decodePcm(uint8_t *outBuffer, int maxSize)
@@ -135,10 +144,18 @@ int VgmFile::decodePcm(uint8_t *outBuffer, int maxSize)
     {
         if ( !m_waitSamples )
         {
-            if ( m_duration && m_samplesPlayed >= m_duration )
+            m_shifter = 0;
+            if ( m_duration )
             {
-                LOGI("m_samplesPlayed: %d\n", m_samplesPlayed);
-                break;
+                if ( m_samplesPlayed >= m_duration )
+                {
+                    LOGI("m_samplesPlayed: %d\n", m_samplesPlayed);
+                    break;
+                }
+                if ( m_fadeEffect && m_samplesPlayed - 1000 >= m_duration )
+                {
+                    m_shifter = (m_duration - m_samplesPlayed) >> 7;
+                }
             }
             int result = m_decoder->decodeBlock();
             if ( result < 0 )
@@ -181,4 +198,9 @@ int VgmFile::decodePcm(uint8_t *outBuffer, int maxSize)
 void VgmFile::setSampleFrequency( uint32_t frequency )
 {
     m_writeScaler = frequency;
+}
+
+void VgmFile::setFading(bool enable)
+{
+    m_fadeEffect = enable;
 }
