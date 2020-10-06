@@ -88,7 +88,7 @@ private:
     uint32_t m_sampleSum;
     bool m_sampleSumValid = false;
     bool m_fadeEffect = false;
-    uint8_t m_shifter = 0;
+    uint16_t m_shifter = 0;
     uint16_t m_volume = 64;
 
     void interpolateSample();

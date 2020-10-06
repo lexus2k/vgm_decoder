@@ -113,8 +113,11 @@ void VgmFile::interpolateSample()
     uint32_t nextSample = m_decoder->getSample();
     StereoChannels &source = reinterpret_cast<StereoChannels&>(nextSample);
 //    StereoChannels &dest = reinterpret_cast<StereoChannels&>(m_sampleSum);
-    source.left >>= m_shifter;
-    source.right >>= m_shifter;
+    if ( m_shifter )
+    {
+        source.left = static_cast<uint32_t>(source.left) * m_shifter / 1024;
+        source.right = static_cast<uint32_t>(source.right) * m_shifter / 1024;
+    }
 
     if ( !m_sampleSumValid ) // If no sample previously reached the mixer assign new sample
     {
@@ -152,7 +155,7 @@ int VgmFile::decodePcm(uint8_t *outBuffer, int maxSize)
                     LOGI("m_samplesPlayed: %d\n", m_samplesPlayed);
                     break;
                 }
-                if ( m_fadeEffect && m_samplesPlayed - 1000 >= m_duration )
+                if ( m_fadeEffect && (m_duration - m_samplesPlayed < VGM_SAMPLE_RATE * 2) )
                 {
                     m_shifter = (m_duration - m_samplesPlayed) >> 7;
                 }

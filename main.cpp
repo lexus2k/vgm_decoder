@@ -71,9 +71,11 @@ int writeFile(const char *name, VgmFile *vgm, int trackIndex)
         0x61746164, 0
     };
     fwrite( &header, sizeof(header), 1, fileptr );
+    vgm->setMaxDuration( 90000 );
+    vgm->setFading( true );
     vgm->setSampleFrequency( 44100 );
     vgm->setTrack( trackIndex );
-    vgm->setVolume( 128 );
+    vgm->setVolume( 100 );
     for(;;)
     {
         int size = vgm->decodePcm(buffer, sizeof(buffer));
