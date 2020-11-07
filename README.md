@@ -8,6 +8,33 @@ It recognizes:
 
 ## Compilation
 
+### Makefile
+
+> make
+
+If you want to compile with audio playing support, please use the following command
+Remember, SDL2 dev libraries must be installed
+
+> make AUDIO_PLAYER=y
+
+### CMake (includes Windows support)
+
+> mkdir build
+> cd build
+> cmake .. && make
+
+If you want to compile with audio playing support, please use the following command
+Remember, SDL2 dev libraries must be installed
+
+For Windows:
+Please, download SDL2 development version from offical SDL site and unpack it to
+SDL2 subfolder before.
+If you have VC installed, cmake will automatically generate project files, then
+compile the project with VC.
+
+> mkdir build
+> cd build
+> cmake -DAUDIO_PLAYER=ON ..
 > make
 
 ## Usage
