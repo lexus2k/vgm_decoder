@@ -23,6 +23,7 @@
 
 default: all
 
+AUDIO_PLAYER ?= n
 CPPFLAGS += -I./include -I./src
 
 OBJS=src/chips/ay-3-8910.o \
@@ -34,6 +35,10 @@ OBJS=src/chips/ay-3-8910.o \
      src/formats/nsf_decoder.o \
      src/vgm_file.o \
 
+ifneq ($(AUDIO_PLAYER),n)
+    LDFLAGS = -lSDL2
+    CPPFLAGS += -DAUDIO_PLAYER=1
+endif
 
 all: $(OBJS)
 	$(CXX) -o vgm2wav $(CCFLAGS) $(OBJS) $(LDFLAGS)

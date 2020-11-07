@@ -27,6 +27,19 @@ SOFTWARE.
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+#ifndef AUDIO_PLAYER
+#define AUDIO_PLAYER 0
+#endif
+
+#if AUDIO_PLAYER
+#ifdef _WIN32
+#include <SDL.h>
+#else
+#include <SDL2/SDL.h>
+#endif
+#endif
 
 int readFile(const char *name, uint8_t **buffer )
 {
@@ -103,6 +116,51 @@ int writeFile(const char *name, VgmFile *vgm, int trackIndex)
     return 0;
 }
 
+#if AUDIO_PLAYER
+
+static bool s_stopped = false;
+
+void getAudioCallback(void *udata, uint8_t *stream, int len)
+{
+    VgmFile *vgm = (VgmFile *)udata;
+    memset(stream, 0, len);
+    int size = vgm->decodePcm(stream, len);
+    s_stopped = size == 0;
+}
+
+int playTrack(VgmFile *vgm, int trackIndex)
+{
+    SDL_Init(SDL_INIT_AUDIO);
+    SDL_AudioSpec spec{};
+    spec.freq = 44100;
+    spec.channels = 2;
+    spec.format = AUDIO_U16SYS;
+    spec.samples = 1024;
+    spec.callback = getAudioCallback;
+    spec.userdata = vgm;
+
+    vgm->setMaxDuration( 90000 );
+    vgm->setFading( true );
+    vgm->setSampleFrequency( 44100 );
+    vgm->setTrack( trackIndex );
+    vgm->setVolume( 100 );
+    s_stopped = false;
+
+    if ( SDL_OpenAudio(&spec, NULL) < 0 )
+    {
+        fprintf(stderr, "Couldn't open audio: %s\n", SDL_GetError());
+        return -1;
+    }
+    SDL_PauseAudio(0);
+    while ( !s_stopped )
+    {
+        SDL_Delay(100);
+    }
+    SDL_CloseAudio();
+    SDL_Quit();
+}
+#endif
+
 int main(int argc, char *argv[])
 {
     int trackIndex = 0;
@@ -110,6 +168,9 @@ int main(int argc, char *argv[])
     {
         fprintf(stderr, "Converts NSF or VGM files to wav data\n");
         fprintf(stderr, "Usage: vgm2pcm input output [track_index]\n");
+        #if AUDIO_PLAYER
+        fprintf(stderr, "Usage: vgm2pcm input play [track_index]\n");
+        #endif
         return -1;
     }
     if (argc > 3)
@@ -129,6 +190,13 @@ int main(int argc, char *argv[])
         fprintf( stderr, "Failed to parse vgm data %s \n", argv[1] );
         return -1;
     }
+    #if AUDIO_PLAYER
+    if ( !strcmp( argv[2], "play" ) )
+    {
+         playTrack( &file, trackIndex );
+    }
+    else
+    #endif
     if ( writeFile( argv[2], &file, trackIndex ) < 0 )
     {
         return -1;

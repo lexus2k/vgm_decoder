@@ -92,7 +92,7 @@ bool VgmMusicDecoder::open(const uint8_t * data, int size)
         return false;
     }
     LOG( "Version: %X.%X \n", m_header->version >> 8, m_header->version & 0xFF );
-    m_rate = m_header->rate ?: 50;
+    m_rate = m_header->rate ? m_header->rate : 50;
     m_headerSize = 64;
     if ( m_header->version >= 0x00000161 )
     {
