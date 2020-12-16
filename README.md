@@ -48,6 +48,10 @@ compile the project with VC.
 
 Now open crisis_force.wav in any audio player.
 
+To play nsf music using vgm2wav (if you compiled it with audio playing support - see above):
+
+> ./vgm2wav crisis_force.nsf play 0
+
 ## Known issues
 
 ## Links
