@@ -24,7 +24,11 @@ Remember, SDL2 dev libraries must be installed
 > cmake .. && make
 
 If you want to compile with audio playing support, please use the following command
-Remember, SDL2 dev libraries must be installed
+(remember, SDL2 dev libraries must be installed):
+
+> cmake -DAUDIO_PLAYER=ON ..<br>
+> make
+
 
 For Windows:
 Please, download SDL2 development version from offical SDL site and unpack it to
@@ -32,10 +36,9 @@ SDL2 subfolder before.
 If you have VC installed, cmake will automatically generate project files, then
 compile the project with VC.
 
-> mkdir build
-> cd build
+> mkdir build<br>
+> cd build<br>
 > cmake -DAUDIO_PLAYER=ON ..
-> make
 
 ## Usage
 
