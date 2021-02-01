@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2020 Aleksei Dynda
+Copyright (c) 2020-2021 Aleksei Dynda
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -152,7 +152,7 @@ inline uint16_t getRegAddress(uint8_t reg)
 NesApu::NesApu(NesCpu *cpu)
    : m_cpu( cpu )
 {
-    m_volume = 64;
+    m_volume = 100;
     reset();
 }
 
@@ -300,9 +300,22 @@ void NesApu::setVolume(uint16_t volume)
     m_volume = volume;
     for(int i=0; i<16; i++)
     {
-        uint32_t vol = static_cast<uint32_t>(nesApuLevelTable[i]) * volume / 64;
-        if ( vol > 65535 ) vol = 65535;
-        m_volTable[i] = vol;
+        uint32_t vol;
+        /**
+         * Calculate volume level tables for each channel. User volume is defined in
+         * parts of 100 (volume / 100).
+         * Also, each channel has specific compensation. That compenation is implemented in NES
+         * hardware, but since current implementation is software, we need to add some coef.
+         * For example, noise has coef = 10/32
+         */
+        vol = static_cast<uint32_t>(nesApuLevelTable[i]) * volume * 33 / ( 100 * 32 );
+        m_rectVolTable[i] = vol > 65535 ? 65535 : vol;
+        vol = static_cast<uint32_t>(nesApuLevelTable[i]) * volume * 15 / ( 100 * 32 );
+        m_triVolTable[i] = vol > 65535 ? 65535 : vol;
+        vol = static_cast<uint32_t>(nesApuLevelTable[i]) * volume * 15 / ( 100 * 32 );
+        m_noiseVolTable[i] = vol > 65535 ? 65535 : vol;
+        vol = static_cast<uint32_t>(nesApuLevelTable[i]) * volume * 68 / ( 100 * 32 );
+        m_dmcVolTable[i] = vol > 65535 ? 65535 : vol;
     }
 }
 
@@ -323,11 +336,11 @@ uint32_t NesApu::getSample()
     updateDmcChannel(m_chan[4]);
 
     uint32_t sample = 0;
-    sample += (m_chan[0].output * 0x0B0) >> 8; // chan 1
-    sample += (m_chan[1].output * 0x0B0) >> 8; // chan 2
-    sample += (m_chan[2].output * 0x050) >> 8; // tri
-    sample += (m_chan[3].output * 0x050) >> 8; // noise
-    sample += (m_chan[4].output * 0x180) >> 8; // dmc
+    sample += m_chan[0].output; // chan 1
+    sample += m_chan[1].output; // chan 2
+    sample += m_chan[2].output; // tri
+    sample += m_chan[3].output; // noise
+    sample += m_chan[4].output; // dmc
 
     if ( sample > 65535 ) sample = 65535;
     return sample | (sample << 16);
@@ -365,7 +378,7 @@ void NesApu::updateRectChannel(int i)
     if (!(m_regs[APU_STATUS] & (1<<i)))
     {
         chan.volume = 0;
-        chan.output = m_volTable[ chan.volume ];
+        chan.output = m_rectVolTable[ chan.volume ];
         return;
     }
 
@@ -419,7 +432,7 @@ void NesApu::updateRectChannel(int i)
     if (!chan.lenCounter)
     {
         chan.volume = 0;
-        chan.output = m_volTable[ chan.volume ];
+        chan.output = m_rectVolTable[ chan.volume ];
         return;
     }
     // Sweep works
@@ -452,7 +465,7 @@ void NesApu::updateRectChannel(int i)
          chan.period > (0x7FF << (CONST_SHIFT_BITS + 4)) )
     {
         chan.volume = 0;
-        chan.output = m_volTable[ chan.volume ];
+        chan.output = m_rectVolTable[ chan.volume ];
         return;
     }
 
@@ -467,7 +480,7 @@ void NesApu::updateRectChannel(int i)
     {
         chan.volume = 0;
     }
-    chan.output = m_volTable[ chan.volume ];
+    chan.output = m_rectVolTable[ chan.volume ];
 }
 
 
@@ -495,7 +508,7 @@ void NesApu::updateTriangleChannel(ChannelInfo &chan)
 
     if (disabled)
     {
-        chan.output = m_volTable[ chan.volume ];
+        chan.output = m_triVolTable[ chan.volume ];
         return;
     }
     // Linear counter control
@@ -519,7 +532,7 @@ void NesApu::updateTriangleChannel(ChannelInfo &chan)
 
     if ((!chan.lenCounter || !chan.linearCounter))
     {
-        chan.output = m_volTable[ chan.volume ];
+        chan.output = m_triVolTable[ chan.volume ];
         return;
     }
 
@@ -531,7 +544,7 @@ void NesApu::updateTriangleChannel(ChannelInfo &chan)
         chan.counter -= ( chan.period + (1 <<  (CONST_SHIFT_BITS + 4)) );
         chan.volume = triangleTable[ chan.sequencer ];
     }
-    chan.output = m_volTable[ chan.volume ];
+    chan.output = m_triVolTable[ chan.volume ];
 }
 
 //-------------
@@ -552,7 +565,7 @@ void NesApu::updateNoiseChannel(ChannelInfo &chan)
     if (!(m_regs[APU_STATUS] & (1<<3)))
     {
         chan.volume = 0;
-        chan.output = m_volTable[ chan.volume ];
+        chan.output = m_noiseVolTable[ chan.volume ];
         return;
     }
 
@@ -606,7 +619,7 @@ void NesApu::updateNoiseChannel(ChannelInfo &chan)
     if (!chan.lenCounter)
     {
         chan.volume = 0;
-        chan.output = m_volTable[ chan.volume ];
+        chan.output = m_noiseVolTable[ chan.volume ];
         return;
     }
 
@@ -632,7 +645,7 @@ void NesApu::updateNoiseChannel(ChannelInfo &chan)
     {
         chan.volume = 0;
     }
-    chan.output = m_volTable[ chan.volume ];
+    chan.output = m_noiseVolTable[ chan.volume ];
 }
 
 //------------------------------
@@ -663,7 +676,7 @@ void NesApu::updateDmcChannel(ChannelInfo &info)
             {
                 info.dmcIrqFlag = !!(m_regs[APU_DMC_DMA_FREQ] & DMC_IRQ_ENABLE_MASK);
                 info.dmcActive = false;
-                info.output = (static_cast<uint32_t>(m_volTable[15]) * info.volume) >> 7;
+                info.output = (static_cast<uint32_t>(m_dmcVolTable[15]) * info.volume) >> 7;
                 return;
             }
         }
@@ -692,7 +705,7 @@ void NesApu::updateDmcChannel(ChannelInfo &info)
             info.counter -= info.period;
         }
     }
-    info.output = (static_cast<uint32_t>(m_volTable[15]) * info.volume) >> 7;
+    info.output = (static_cast<uint32_t>(m_dmcVolTable[15]) * info.volume) >> 7;
     return;
 }
 

@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2020 Aleksei Dynda
+Copyright (c) 2020-2021 Aleksei Dynda
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -46,7 +46,7 @@ public:
     /** Sets sampling frequency. ,Must be called before decodePcm */
 //    void setSampleFrequency( uint32_t frequency ) virtual;
 
-    /** Sets volume, default level is 64 */
+    /** Sets volume, default level is 100 */
     virtual void setVolume(uint16_t volume) {}
 
     /** Returns number of tracks in opened file */
