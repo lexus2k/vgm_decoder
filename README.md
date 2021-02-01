@@ -1,4 +1,4 @@
-# VGM/NSF decoder
+# VGM/NSF decoder (*This is ARDUINO branch*)
 
 The library can be used to convert VGM / NSF data to PCM on the fly.
 
@@ -6,51 +6,39 @@ It recognizes:
  * vgm files (AY-3-8910, YM2149 (MSX2) and NES APU (Nes console))
  * nsf files (Nintendo Sound Format - NES APU)
 
-## Compilation
+## How to install to Arduino IDE
 
-### Makefile
+1. Open https://github.com/lexus2k/vgm_decoder project page and switch from master to Arduino.
+2. "Download ZIP" file (the Green Code button on the right).
+3. Start your Arduino IDE and select Add ZIP library.
 
-> make
+## Examples
 
-If you want to compile with audio playing support, please use the following command
-Remember, SDL2 dev libraries must be installed
+```.cpp
+#include "vgm_file.h"
 
-> make AUDIO_PLAYER=y
+VgmFile vgm;
 
-### CMake (includes Windows support)
+void setup()
+{
+    vgm.open(data, len);   // Here data is pointer to Vgm/Nes file in memory
+    vgm.setTrack( 0 );     // Valid for NSF files
+    vgm.setVolume( 100 );  // Volume control
+}
 
-> mkdir build
-> cd build
-> cmake .. && make
+static uint16_t buffer[8192];
 
-If you want to compile with audio playing support, please use the following command
-(remember, SDL2 dev libraries must be installed):
+void loop()
+{
+    int len = vgm.decodePcm((uint8_t *)buffer, sizeof(buffer));
+    // Do what you want with decoded PCM 16-bit stereo data
+    if ( len == 0 )
+    {
+        // That's the end of track
+    }
+}
 
-> cmake -DAUDIO_PLAYER=ON ..<br>
-> make
-
-
-For Windows:
-Please, download SDL2 development version from offical SDL site and unpack it to
-SDL2 subfolder before.
-If you have VC installed, cmake will automatically generate project files, then
-compile the project with VC.
-
-> mkdir build<br>
-> cd build<br>
-> cmake -DAUDIO_PLAYER=ON ..
-
-## Usage
-
-> ./vgm2wav crisis_force.nsf crisis_force.wav 0
->
-> DONE
-
-Now open crisis_force.wav in any audio player.
-
-To play nsf music using vgm2wav (if you compiled it with audio playing support - see above):
-
-> ./vgm2wav crisis_force.nsf play 0
+```
 
 ## Known issues
 
