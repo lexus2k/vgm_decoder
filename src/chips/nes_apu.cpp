@@ -25,7 +25,6 @@ SOFTWARE.
 #include "chips/nes_apu.h"
 #include "chips/nes_cpu.h"
 
-#include <malloc.h>
 #include <stdio.h>
 
 #define NES_APU_DEBUG 1

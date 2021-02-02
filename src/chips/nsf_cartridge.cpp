@@ -29,6 +29,7 @@ SOFTWARE.
 #include <string.h>
 
 #define CLR_VALUE 0x00
+#define BBRAM_SIZE 0x2000
 
 #define NSF_CARTRIDGE_DEBUG 1
 
@@ -71,12 +72,12 @@ bool NsfCartridge::allocBbRam()
 {
     if ( m_bbRam == nullptr )
     {
-        m_bbRam = static_cast<uint8_t *>(malloc(8192));
+        m_bbRam = static_cast<uint8_t *>(malloc(BBRAM_SIZE));
         if ( m_bbRam == nullptr )
         {
             return false;
         }
-        memset( m_bbRam, CLR_VALUE, 8192 );
+        memset( m_bbRam, CLR_VALUE, BBRAM_SIZE );
     }
     return true;
 }
