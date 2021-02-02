@@ -65,6 +65,20 @@ public:
     void setMaxDuration( uint32_t milliseconds );
 
     /**
+     * Returns number of total samples in track.
+     * Be careful, some formats do not allow to calculate samples before
+     * decoding all data. Vgm decoder decodes in realtime, thus it may return
+     * 0 total samples. If you want to limit play duration, please use
+     * setMaxDuration() method.
+     */
+    uint32_t getTotalSamples() { return m_duration; }
+
+    /**
+     * Returns number of samples, already decoded.
+     */
+    uint32_t getDecodedSamples() { return m_samplesPlayed; }
+
+    /**
      * Enables fade effect
      *
      * @param enable true to enable fade effect at the end
