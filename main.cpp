@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2020 Aleksei Dynda
+Copyright (c) 2020-2021 Aleksei Dynda
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -62,6 +62,7 @@ int readFile(const char *name, uint8_t **buffer )
 
 int writeFile(const char *name, VgmFile *vgm, int trackIndex)
 {
+    bool warningDisplayed = false;
     uint8_t buffer[1024];
     FILE *fileptr;
 
@@ -99,6 +100,11 @@ int writeFile(const char *name, VgmFile *vgm, int trackIndex)
         for (int i = 0; i<sizeof(buffer); i+=2)
         {
             // Convert unsigned PCM16 to signed PCM16
+            if ( *reinterpret_cast<uint16_t *>(buffer+i) == 65535 && !warningDisplayed )
+            {
+                warningDisplayed = true;
+                fprintf( stderr, "Warning. Melody is too loud, possible peak cuts\n" );
+            }
             *reinterpret_cast<int16_t *>(buffer+i) = *reinterpret_cast<uint16_t *>(buffer+i) - 32768;
         }
         fwrite( buffer, size, 1, fileptr );
@@ -158,6 +164,7 @@ int playTrack(VgmFile *vgm, int trackIndex)
     }
     SDL_CloseAudio();
     SDL_Quit();
+    return 0;
 }
 #endif
 

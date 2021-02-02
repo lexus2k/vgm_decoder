@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2020 Aleksei Dynda
+Copyright (c) 2020-2021 Aleksei Dynda
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -80,7 +80,7 @@ public:
      */
     uint32_t getSample();
 
-    /** Sets volume, default volume is 64 */
+    /** Sets volume, default volume is 100 */
     void setVolume(uint16_t volume);
 
     /** Resets nes apu state */
@@ -93,7 +93,10 @@ private:
     NesCpu *m_cpu = nullptr;
 
     uint8_t m_regs[APU_MAX_REG]{};
-    uint64_t m_volTable[16]{};
+    uint32_t m_rectVolTable[16]{};
+    uint32_t m_triVolTable[16]{};
+    uint32_t m_noiseVolTable[16]{};
+    uint32_t m_dmcVolTable[16]{};
 
     uint32_t m_lastFrameCounter = 0;
     uint8_t m_apuFrames = 0;
@@ -101,7 +104,7 @@ private:
     bool m_quaterSignal = false;
     bool m_halfSignal = false;
     bool m_fullSignal = false;
-    uint16_t m_volume = 64;
+    uint16_t m_volume = 100;
     ChannelInfo m_chan[5]{};
 
     // APU Processing

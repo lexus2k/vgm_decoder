@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2020 Aleksei Dynda
+Copyright (c) 2020-2021 Aleksei Dynda
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -69,7 +69,7 @@ bool VgmFile::open(const uint8_t * data, int size)
     }
     if ( m_decoder )
     {
-        if ( m_volume != 64 ) m_decoder->setVolume( m_volume );
+        if ( m_volume != 100 ) m_decoder->setVolume( m_volume );
         return true;
     }
     return false;

@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2020 Aleksei Dynda
+Copyright (c) 2020-2021 Aleksei Dynda
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -91,7 +91,7 @@ public:
     /** Returns currently set sample frequency */
     uint32_t getSampleFrequency() const { return m_sampleFrequency; }
 
-    /** Changes volume level. Default level is 64! */
+    /** Changes volume level. Default level is 100! */
     void setVolume(uint16_t volume);
 
     /** TODO: */
@@ -177,7 +177,7 @@ private:
     uint16_t m_levelTable[32];
 
     /** user volume level */
-    uint16_t m_userVolume = 64;
+    uint16_t m_userVolume = 100;
 };
 
 
