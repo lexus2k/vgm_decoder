@@ -156,12 +156,11 @@ void AY38910::setSampleFrequency( uint32_t sampleFrequency )
 void AY38910::setVolume(uint16_t volume)
 {
     m_userVolume = volume;
-    reset();
+    calcVolumeTables();
 }
 
-void AY38910::reset()
+void AY38910::calcVolumeTables()
 {
-    m_envStepMask = ( m_chipType & 0xF0 ) ? 0x1F: 0x0F;
     if ( m_chipType & 0xF0 )
     {
         for (int i = 0; i < 32; i++)
@@ -180,6 +179,11 @@ void AY38910::reset()
             m_levelTable[i] = vol;
         }
     }
+}
+
+void AY38910::reset()
+{
+    m_envStepMask = ( m_chipType & 0xF0 ) ? 0x1F: 0x0F;
     m_toneFrequencyScale = (m_frequency / m_sampleFrequency); // * 16
     m_envFrequencyScale = (m_frequency / m_sampleFrequency);  // * 256
     if ( !( m_chipType & 0xF0 ) )

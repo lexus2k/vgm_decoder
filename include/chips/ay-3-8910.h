@@ -178,6 +178,9 @@ private:
 
     /** user volume level */
     uint16_t m_userVolume = 100;
+
+    /** Recalculates volume tables */
+    void calcVolumeTables();
 };
 
 
