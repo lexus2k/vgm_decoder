@@ -50,7 +50,7 @@ Wonderful resources for NSF files: https://www.zophar.net/music, for VGM files: 
 
 MIT License
 
-Copyright (c) 2020 Aleksei Dynda
+Copyright (c) 2020-2021 Aleksei Dynda
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
